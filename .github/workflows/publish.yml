@@ -42,4 +42,3 @@ jobs:
         password: ${{ secrets.DOCKER_TOKEN }}
         platforms: linux/amd64,linux/arm64
         tags: latest,${{ github.event.inputs.SemVer }}
-        workdir: Server
