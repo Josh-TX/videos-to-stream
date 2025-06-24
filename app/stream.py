@@ -10,8 +10,6 @@ gi.require_version("GstPbutils", "1.0")
 gi.require_version("GstController", "1.0")
 from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 
-# step23d fixes the audio issues by re-using the GstController.
-
 # the initial pipeline looks like this
 # videotestsrc -> videoconvert -> capsfilter -> compositor c -> x264enc -> queue -> mpegtsmux m -> hlssink
 # audiomixer am -> avenc_aac -> queue -> m
@@ -20,32 +18,32 @@ from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 # filesrc -> decodebin -> [decodebin-video-src] -> video_identity -> videoconvert -> videoscale -> capsfilter -> c
 #  [decodebin-audio-src] -> audioconvert -> audioresample -> audio_identity -> am
 
-
 Gst.init(None)
-
-VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm'}
-PREROLL_MS = 1000
-BIN_CREATION_MS = 1000
 
 class Settings:
     pass
 settings = Settings()
-settings.max_duration_ms = math.floor(float(os.getenv("MAX_DURATION_S", "2")) * 1000)
-settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "4")) * 1000)
+settings.max_clip_duration_ms = math.floor(float(os.getenv("MAX_CLIP_DURATION_S", "60")) * 1000)
+if float(os.getenv("MAX_CLIP_DURATION_M", "0")) > 0:
+    settings.max_clip_duration_ms = math.floor(float(os.getenv("MAX_CLIP_DURATION_M", "0")) * 60 * 1000)
+settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "2")) * 1000)
 settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", "0")) * 1000)
-settings.max_clips_per_file = math.floor(float(os.getenv("MAX_CLIPS_PER_FILE", "3")))
+settings.max_clips_per_file = math.floor(float(os.getenv("MAX_CLIPS_PER_FILE", "2")))
 settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "3")) * 1000)
 settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
-settings.input_base_dir = os.getenv("INPUT_BASE_DIR", "./noise")
+settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
+settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
+settings.width = int(os.getenv("WIDTH", "1280"))
+settings.height = int(os.getenv("WIDTH", "720"))
+settings.input_base_dir = "/media"
+settings.output_dir = "./hls"
+settings.bin_creation_ms = 1000
 settings.audio_controller_fix = True
-settings.cleanup_delay_ms = 1000
-settings.force_cleanup_delay_ms = 4000
-
+os.makedirs(settings.input_base_dir, exist_ok=True)
+os.makedirs(settings.output_dir, exist_ok=True)
 
 class HLSPipelineManager:
     def __init__(self):
-        self.output_dir = os.getenv("OUTPUT_DIR", "./hls")
-        os.makedirs(self.output_dir, exist_ok=True)
         self.pipeline = Gst.Pipeline.new("hls-pipeline")
         self.clock = self.pipeline.get_clock()
         self.clipinfo_manager = ClipInfoManager()
@@ -85,13 +83,13 @@ class HLSPipelineManager:
         # Properties
         videotestsrc.set_property("is-live", True)
         videotestsrc.set_property("pattern", "ball")
-        videocapsfilter.set_property("caps", Gst.Caps.from_string("video/x-raw, format=NV12, width=1280, height=720, pixel-aspect-ratio=1/1"))
+        videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
 
-        hlssink.set_property("location", os.path.join(self.output_dir, "segment%05d.ts"))
-        hlssink.set_property("playlist-location", os.path.join(self.output_dir, "playlist.m3u8"))
+        hlssink.set_property("location", os.path.join(settings.output_dir, "segment%05d.ts"))
+        hlssink.set_property("playlist-location", os.path.join(settings.output_dir, "playlist.m3u8"))
         hlssink.set_property("target-duration", 4)
-        hlssink.set_property("playlist-length", 10)
-        hlssink.set_property("max-files", 15)
+        hlssink.set_property("playlist-length", 12)
+        hlssink.set_property("max-files", 18)
 
         x264enc.set_property("speed-preset", "fast")
         audiotestsrc.set_property("is-live", True)
@@ -124,20 +122,6 @@ class HLSPipelineManager:
         self.ready_to_create = True
         GLib.timeout_add(2000, self.timeout_callback)
 
-    # def prepare_next(self):
-    #     prep_time_needed_ns = (2000 + 1000 + PREROLL_MS) * Gst.MSECOND #  2s for prepare_next variance, 1s for creation time (seeking usually takes no more than 1s), and add the preroll_ms
-    #     if not self.clips:
-    #         fadeout_t = self.create_clip(self.get_time() + prep_time_needed_ns)
-    #         return fadeout_t - prep_time_needed_ns - self.get_time()
-    #     now = self.get_time()
-    #     existing_clip = max(self.clips, key=lambda clip: clip.fadeout_t)
-    #     remaining_time_ns = existing_clip.fadeout_t - now
-    #     if (remaining_time_ns > prep_time_needed_ns):
-    #         return None
-    #     fadeout_t = self.create_clip(existing_clip.fadeout_t)
-    #     time_to_next
-    #     return 
-
     def timeout_callback(self):
         try:
             ns_till_next_prepare = self.prepare_next()
@@ -153,7 +137,7 @@ class HLSPipelineManager:
         return False # repeat timeout
 
     def prepare_next(self):
-        prep_time_needed_ns = (BIN_CREATION_MS + PREROLL_MS) * Gst.MSECOND #  1s for creation time (seeking usually takes no more than 1s), and add the preroll_ms
+        prep_time_needed_ns = (settings.bin_creation_ms + settings.preroll_ms) * Gst.MSECOND
         if not self.clips:
             fadeout_t = self.create_clip(self.get_time() + prep_time_needed_ns)
             return fadeout_t - self.get_time() - prep_time_needed_ns
@@ -168,7 +152,7 @@ class HLSPipelineManager:
     def create_clip(self, fadein_t):
         def on_ready(filebin):
             ms_till_fadein = (fadein_t - self.get_time()) / Gst.MSECOND
-            timeout_ms = max(5, ms_till_fadein - PREROLL_MS)
+            timeout_ms = max(5, ms_till_fadein - settings.preroll_ms)
             GLib.timeout_add(timeout_ms, lambda: self.add_clip(clip))
         clip = self.clipinfo_manager.next_clipinfo()
         clip.fadein_t = fadein_t
@@ -176,7 +160,6 @@ class HLSPipelineManager:
         clip.fadeout_t = fadein_t + ms_between_fades * Gst.MSECOND
         clip.filebin = FileBin(clip.location, clip.seek_ms)
         clip.filebin.connect("ready", on_ready)
-        #existing_clip = next((clip for clip in self.clips if clip.fadeout == target_fadeout), None)
         self.clips.append(clip)
         return clip.fadeout_t
 
@@ -243,7 +226,7 @@ class HLSPipelineManager:
             def try_cleanup():
                 if old_clip.video_finished and old_clip.audio_finished:
                     old_clip.cleanup_scheduled = True
-                    GLib.timeout_add(settings.cleanup_delay_ms, lambda: self.cleanup_clip(old_clip))
+                    GLib.timeout_add(settings.postroll_ms, lambda: self.cleanup_clip(old_clip))
     
             def detect_end_video(pad, info):
                 buffer = info.get_buffer()
@@ -286,7 +269,8 @@ class HLSPipelineManager:
                     if not old_clip.video_finished:
                         old_compositor_pad.remove_probe(video_probe_id)
                     self.cleanup_clip(old_clip)
-            GLib.timeout_add((ns_till_swap + transition_ns) / Gst.MSECOND + settings.force_cleanup_delay_ms, force_cleanup)
+            # allow postroll + 2 seconds until we force cleanup
+            GLib.timeout_add((ns_till_swap + transition_ns) / Gst.MSECOND + settings.postroll_ms + 2000, force_cleanup)
         return False # Don't repeat timeout
 
     def cleanup_clip(self, clip):
@@ -386,7 +370,7 @@ class ClipInfoManager:
         if not location:
             raise FileNotFoundError(f"[ERROR] no video files in {settings.input_base_dir}")
         file_duration_ms = math.floor(self._get_duration_ms(location))
-        duration_w_inter_transitions = settings.max_duration_ms + (settings.inter_transition_ms * 2)
+        duration_w_inter_transitions = settings.max_clip_duration_ms + (settings.inter_transition_ms * 2)
 
         def simple_case():
             clip_duration_ms = min(duration_w_inter_transitions, file_duration_ms)
@@ -395,12 +379,12 @@ class ClipInfoManager:
             return [ClipInfo(location, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms)]
 
         # first check if we're in the simple case where it's obvious there's just 1 clip for this file
-        if settings.max_clips_per_file <= 1 or file_duration_ms < (duration_w_inter_transitions + settings.max_duration_ms):
+        if settings.max_clips_per_file <= 1 or file_duration_ms < (duration_w_inter_transitions + settings.max_clip_duration_ms):
             return simple_case()
 
         # step 1: compute clip count
         ms_after_first_clip = file_duration_ms - duration_w_inter_transitions # must result in a positive number because of the earlier check
-        duration_w_intra_transitions = settings.max_duration_ms + (settings.intra_transition_ms * 2)
+        duration_w_intra_transitions = settings.max_clip_duration_ms + (settings.intra_transition_ms * 2)
         max_clips_due_to_gaps = 1 + (ms_after_first_clip // (duration_w_intra_transitions + settings.intra_file_min_gap_ms))
         max_clips_due_to_percent = file_duration_ms // settings.intra_file_max_percent
         clip_count = min(max_clips_due_to_gaps, max_clips_due_to_percent, settings.max_clips_per_file)
@@ -429,7 +413,7 @@ class ClipInfoManager:
             fadeout_transition_ms = settings.inter_transition_ms if i == (space_count - 1) else settings.intra_transition_ms
             clip_duration_ms = duration_w_intra_transitions
             if i == 0 or i == space_count - 1:
-                clip_duration_ms = settings.max_duration_ms + settings.inter_transition_ms + settings.intra_transition_ms
+                clip_duration_ms = settings.max_clip_duration_ms + settings.inter_transition_ms + settings.intra_transition_ms
             clipinfos.append(ClipInfo(location, seek_ms, clip_duration_ms, fadein_transition_ms, fadeout_transition_ms))
             seek_ms += clip_duration_ms
         return clipinfos
@@ -481,6 +465,7 @@ class FileBin(Gst.Bin):
     def __init__(self, location, seek_ms):
         super().__init__()
         FileBin._instance_count += 1
+        print(f"Created Filebin for {location}. Active Filebin Count: {FileBin._instance_count}")
         self.location = location
         self.seek_ms = seek_ms
         self.pad_states = {"video": False, "audio": False}
@@ -505,8 +490,7 @@ class FileBin(Gst.Bin):
         
         self.filesrc.set_property("location", self.location)
         self.videoscale.set_property("add-borders", True)
-        self.vcapsfilter.set_property("caps", Gst.Caps.from_string(
-            "video/x-raw, format=NV12, width=1280, height=720, pixel-aspect-ratio=1/1"))
+        self.vcapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
         self.audiocapsfilter.set_property("caps", Gst.Caps.from_string("audio/x-raw, format=F32LE,rate=44100,channels=2"))
         elements = [
             self.filesrc, self.decodebin,
@@ -528,7 +512,6 @@ class FileBin(Gst.Bin):
 
     def __del__(self):
         FileBin._instance_count -= 1
-        print(f"FileBin __del__ called. Remaining instances: {FileBin._instance_count}")
 
     def _on_pad_added(self, decodebin, pad):
         caps = pad.query_caps(None).to_string()
@@ -648,23 +631,6 @@ class FileBin(Gst.Bin):
         pipeline = self.get_parent()
         return pipeline.get_clock().get_time() - pipeline.get_base_time()
 
-def print_running_time(pipeline):
-    clock = pipeline.get_clock()
-    if clock:
-        base_time = pipeline.get_base_time()
-        current_time = clock.get_time()
-        running_time = current_time - base_time
-        print(f"[TIMING] Pipeline running time: {running_time / Gst.SECOND:.3f} seconds")
-    return True  # Continue repeating
-
-def dump_pipeline_graph(pipeline):
-    # export GST_DEBUG_DUMP_DOT_DIR=.
-    Gst.debug_bin_to_dot_file(pipeline, Gst.DebugGraphDetails.ALL, "dot/step-10-pipeline-secondlater")
-    print("[INFO] step-10-pipeline-secondlater.dot written")
-    return False
-
-# Run everything
 if __name__ == "__main__":
     manager = HLSPipelineManager()
-
     manager.run()
