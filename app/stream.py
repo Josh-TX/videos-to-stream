@@ -106,7 +106,7 @@ class HLSPipelineManager:
         # Link video path
         videotestsrc.link(videoconvert)
         videoconvert.link(videocapsfilter)
-        compositor_pad = self.compositor.get_request_pad("sink_%u")
+        compositor_pad = self.compositor.request_pad_simple("sink_%u")
         compositor_pad.set_property("alpha", 1)
         compositor_pad.set_property("zorder", 0)
         videocapsfilter.get_static_pad("src").link(compositor_pad)
@@ -187,7 +187,7 @@ class HLSPipelineManager:
         self.pipeline.add(clip.filebin)
         before_started = self.get_time()
         filebin_video_pad = clip.filebin.get_static_pad("video_src")
-        compositor_pad = self.compositor.get_request_pad("sink_%u")
+        compositor_pad = self.compositor.request_pad_simple("sink_%u")
         compositor_pad.set_property("zorder", self.zorder)
         compositor_pad.set_property("alpha", 0)
         self.zorder += 1
@@ -195,7 +195,7 @@ class HLSPipelineManager:
 
         filebin_audio_pad = clip.filebin.get_static_pad("audio_src")
         if filebin_audio_pad:
-            audiomixer_pad = self.audiomixer.get_request_pad("sink_%u")
+            audiomixer_pad = self.audiomixer.request_pad_simple("sink_%u")
             audiomixer_pad.set_property("volume", 0)
             filebin_audio_pad.link(audiomixer_pad)
 

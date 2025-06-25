@@ -1,4 +1,4 @@
-FROM debian:bullseye
+FROM debian:bookworm
 
 # Install Python 3 and required packages
 RUN apt-get update && apt-get install -y \
