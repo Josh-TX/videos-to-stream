@@ -3,6 +3,7 @@ import os
 import random
 import math
 from collections import deque
+from datetime import datetime, timedelta, UTC
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GLib", "2.0")
@@ -28,22 +29,28 @@ if float(os.getenv("MAX_CLIP_DURATION_M", "0")) > 0:
     settings.max_clip_duration_ms = math.floor(float(os.getenv("MAX_CLIP_DURATION_M", "0")) * 60 * 1000)
 settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "2")) * 1000)
 settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", "0")) * 1000)
-settings.max_clips_per_file = math.floor(float(os.getenv("MAX_CLIPS_PER_FILE", "2")))
+settings.max_clips_per_file = math.floor(float(os.getenv("MAX_CLIPS_PER_FILE", "1")))
 settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "3")) * 1000)
 settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
 settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
 settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("WIDTH", "720"))
+
 settings.input_base_dir = "/media"
 settings.output_dir = "./hls"
 settings.bin_creation_ms = 1000
 settings.audio_controller_fix = True
+settings.auto_pause_s = 60
+settings.last_activity_file = "last-activity.txt"
+settings.last_activity_on_startup_s = 30
+
 os.makedirs(settings.input_base_dir, exist_ok=True)
 os.makedirs(settings.output_dir, exist_ok=True)
 
 class HLSPipelineManager:
     def __init__(self):
+        self.update_last_activity_file()
         self.pipeline = Gst.Pipeline.new("hls-pipeline")
         self.clock = self.pipeline.get_clock()
         self.clipinfo_manager = ClipInfoManager()
@@ -119,11 +126,24 @@ class HLSPipelineManager:
         mpegtsmux.link(hlssink)
 
         self.zorder = 1
+        self.is_paused = False
         self.ready_to_create = True
         GLib.timeout_add(2000, self.timeout_callback)
 
     def timeout_callback(self):
         try:
+            s = self.get_seconds_since_activity()
+            if s > settings.auto_pause_s:
+                if not self.is_paused:
+                    print(f"pausing stream due to {s} seconds of inactivity")
+                    self.pipeline.set_state(Gst.State.PAUSED)
+                    self.is_paused = True
+                GLib.timeout_add(1000, self.timeout_callback)
+                return False
+            if self.is_paused:
+                print(f"resuming stream")
+                self.pipeline.set_state(Gst.State.PLAYING)
+                self.is_paused = False
             ns_till_next_prepare = self.prepare_next()
             timeout_ms = min(2000, max(5, ns_till_next_prepare / Gst.MSECOND)) + 5
             GLib.timeout_add(timeout_ms, self.timeout_callback)
@@ -296,14 +316,30 @@ class HLSPipelineManager:
     def get_time(self):
         return self.pipeline.get_clock().get_time() - self.pipeline.get_base_time()
 
+
+    
+    def get_seconds_since_activity(self):
+        try:
+            with open(settings.last_activity_file, "r") as f:
+                timestamp_str = f.read().strip()
+            last_activity = datetime.fromisoformat(timestamp_str)
+            now = datetime.now(UTC)
+            return math.floor((now - last_activity).total_seconds())
+        except Exception as e:
+            print(f"Error reading last activity: {e}")
+            
+    def update_last_activity_file(self): #used when starting up to ensure we don't immediately pause
+        future_time = datetime.now(UTC) + timedelta(seconds=settings.last_activity_on_startup_s)
+        with open(settings.last_activity_file, "w") as f:
+            f.write(future_time.isoformat())
+
     def is_playing(self):
         success, state, pending = self.pipeline.get_state(0)
         return state == Gst.State.PLAYING
 
-    def pause(self, duration_ms):
+    def pause(self):
         print("pause")
         self.pipeline.set_state(Gst.State.PAUSED)
-        GLib.timeout_add(duration_ms, lambda: self.resume())
         return False
 
     def resume(self):
