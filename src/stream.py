@@ -2,6 +2,7 @@ import gi
 import os
 import random
 import math
+import re
 from collections import deque
 from datetime import datetime, timedelta, UTC
 
@@ -36,6 +37,11 @@ settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
 settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("WIDTH", "720"))
+
+settings.whitelist_path_contains_csv = os.getenv("WHITELIST_PATH_CONTAINS_CSV", "").strip()
+settings.whitelist_path_startswith_csv = os.getenv("WHITELIST_PATH_STARTSWITH_CSV", "").strip()
+settings.blacklist_path_contains_csv = os.getenv("BLACKLIST_PATH_CONTAINS_CSV", "").strip()
+settings.blacklist_path_startswith_csv = os.getenv("BLACKLIST_PATH_STARTSWITH_CSV", "").strip()
 
 settings.input_base_dir = "/media"
 settings.output_dir = "./serve"
@@ -492,6 +498,27 @@ class ClipInfoManager:
 
     def _get_files(self):
         video_files = []
+
+        white_contain_pattern = None
+        white_startswith_list = None
+        black_contain_pattern = None
+        black_startswith_list = None
+        any_filters = False
+        if settings.whitelist_path_contains_csv:
+            any_filters = True
+            whitelist_terms_lower = [term.lower() for term in settings.whitelist_path_contains_csv.split(",") if term.strip()]
+            white_contain_pattern = re.compile("|".join(re.escape(term) for term in whitelist_terms_lower))
+        if settings.whitelist_path_startswith_csv:
+            any_filters = True
+            white_startswith_list = [term.lower() for term in settings.whitelist_path_startswith_csv.split(",") if term.strip()]
+        if settings.blacklist_path_contains_csv:
+            any_filters = True
+            blacklist_terms_lower = [term.lower() for term in settings.blacklist_path_contains_csv.split(",") if term.strip()]
+            black_contain_pattern = re.compile("|".join(re.escape(term) for term in blacklist_terms_lower))
+        if settings.blacklist_path_startswith_csv:
+            any_filters = True
+            black_startswith_list = [term.lower() for term in settings.blacklist_path_startswith_csv.split(",") if term.strip()]
+
         stack = [settings.input_base_dir]
         while stack:
             current_dir = stack.pop()
@@ -500,6 +527,20 @@ class ClipInfoManager:
                     if entry.is_dir():
                         stack.append(entry.path)
                     elif entry.is_file():
+                        if not os.path.splitext(entry.name)[1].lower() in self.video_extensions:
+                            continue
+                        if not any_filters: # since this is a very common case, handle it now for best performance
+                            video_files.append(entry.path)
+                            continue
+                        path = os.path.relpath(entry.path, start=settings.input_base_dir).lower()
+                        if white_startswith_list and not any(path.startswith(p) for p in white_startswith_list):
+                            continue
+                        if white_contain_pattern and not bool(white_contain_pattern.search(path)): 
+                            continue
+                        if black_startswith_list and any(path.startswith(p) for p in black_startswith_list):
+                            continue
+                        if black_contain_pattern and bool(black_contain_pattern.search(path)): 
+                            continue
                         video_files.append(entry.path)
         return video_files
 
