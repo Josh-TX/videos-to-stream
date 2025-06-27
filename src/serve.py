@@ -4,7 +4,7 @@ import functools
 from datetime import datetime, UTC
 
 PORT = 3000
-DIRECTORY = "hls"
+DIRECTORY = "serve"
 LAST_ACTIVITY_FILE = "last-activity.txt"
 
 class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -12,6 +12,8 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Origin, Accept')
+        if self.path.endswith(".m3u8"):
+            self.send_header('Cache-Control', 'no-cache')
         super().end_headers()
 
     def do_GET(self):

@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y \
     gir1.2-gst-plugins-base-1.0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY app/ ./app/
+COPY src/*.py /app/
+COPY src/web /serve/
+
 EXPOSE 8000
 CMD ["bash", "-c", "python3 -u app/stream.py & python3 app/serve.py"]

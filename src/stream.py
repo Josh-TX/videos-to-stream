@@ -38,7 +38,7 @@ settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("WIDTH", "720"))
 
 settings.input_base_dir = "/media"
-settings.output_dir = "./hls"
+settings.output_dir = "./serve"
 settings.bin_creation_ms = 1000
 settings.audio_controller_fix = True
 settings.auto_pause_s = 60
@@ -349,7 +349,7 @@ class HLSPipelineManager:
 
     def run(self):
         self.pipeline.set_state(Gst.State.PLAYING)
-        print("[INFO] HLS pipeline is running. Serving segments in ./hls/")
+        print(f"[INFO] HLS pipeline is running. Serving segments in {settings.output_dir}")
 
         loop = GLib.MainLoop()
         bus = self.pipeline.get_bus()
@@ -455,7 +455,9 @@ class ClipInfoManager:
         return clipinfos
 
     def _next_file(self):
+        start_time = datetime.now(UTC)
         all_files = self._get_files()
+        mid_time = datetime.now(UTC)
         filecount = len(all_files)
 
         if filecount == 0:
@@ -475,6 +477,10 @@ class ClipInfoManager:
         selected = random.choice(eligible)
         self.recent_files_queue.append(selected)
         self.ever_selected.add(selected)
+        end_time = datetime.now(UTC)
+        duration1_ms = (mid_time - start_time).total_seconds() * 1000
+        duration2_ms = (end_time - mid_time).total_seconds() * 1000
+        print(f"scanned files in: {duration1_ms:.2f} ms, selected file in: {duration2_ms:.2f} ms")
         return selected
 
     def _get_duration_ms(self, location):
@@ -486,10 +492,15 @@ class ClipInfoManager:
 
     def _get_files(self):
         video_files = []
-        for dirpath, _, filenames in os.walk(settings.input_base_dir):
-            for filename in filenames:
-                if os.path.splitext(filename)[1].lower() in self.video_extensions:
-                    video_files.append(os.path.join(dirpath, filename))
+        stack = [settings.input_base_dir]
+        while stack:
+            current_dir = stack.pop()
+            with os.scandir(current_dir) as it:
+                for entry in it:
+                    if entry.is_dir():
+                        stack.append(entry.path)
+                    elif entry.is_file():
+                        video_files.append(entry.path)
         return video_files
 
 class FileBin(Gst.Bin):
