@@ -38,10 +38,15 @@ settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("WIDTH", "720"))
 
-settings.whitelist_path_contains_csv = os.getenv("WHITELIST_PATH_CONTAINS_CSV", "").strip()
-settings.whitelist_path_startswith_csv = os.getenv("WHITELIST_PATH_STARTSWITH_CSV", "").strip()
-settings.blacklist_path_contains_csv = os.getenv("BLACKLIST_PATH_CONTAINS_CSV", "").strip()
-settings.blacklist_path_startswith_csv = os.getenv("BLACKLIST_PATH_STARTSWITH_CSV", "").strip()
+settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip()
+settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
+settings.exclude_notstartswith_csv = os.getenv("EXCLUDE_NOTSTARTSWITH_CSV", "").strip()
+settings.exclude_notcontains_csv = os.getenv("EXCLUDE_NOTCONTAINS_CSV", "").strip()
+settings.bias_startswith_csv = os.getenv("BIAS_STARTSWITH_CSV", "").strip()
+settings.bias_contains_csv = os.getenv("BIAS_CONTAINS_CSV", "").strip()
+settings.bias_notstartswith_csv = os.getenv("BIAS_NOTSTARTSWITH_CSV", "").strip()
+settings.bias_notcontains_csv = os.getenv("BIAS_NOTCONTAINS_CSV", "").strip()
+settings.bias_factor = int(os.getenv("BIAS_FACTOR", "2"))
 
 settings.input_base_dir = "/media"
 settings.output_dir = "./serve"
@@ -50,6 +55,7 @@ settings.audio_controller_fix = True
 settings.auto_pause_s = 60
 settings.last_activity_file = "last-activity.txt"
 settings.last_activity_on_startup_s = 30
+settings.recent_file_queue_length = 30
 
 os.makedirs(settings.input_base_dir, exist_ok=True)
 os.makedirs(settings.output_dir, exist_ok=True)
@@ -393,9 +399,12 @@ class ClipInfo:
 
 class ClipInfoManager:
     def __init__(self):
-        self.recent_files_queue = deque(maxlen=10)
+        self.recent_unbiased_files_queue = deque(maxlen=settings.recent_file_queue_length)
+        self.recent_biased_files_queue = deque(maxlen=settings.recent_file_queue_length)
+        self.unbiased_files_set = set()
+        self.biased_files_set = set()
+        self.bias_iteration_index = 0
         self.clipinfo_queue = deque()
-        self.ever_selected = set()
         self.discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
         self.video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm'}
 
@@ -461,33 +470,78 @@ class ClipInfoManager:
         return clipinfos
 
     def _next_file(self):
-        start_time = datetime.now(UTC)
-        all_files = self._get_files()
-        mid_time = datetime.now(UTC)
-        filecount = len(all_files)
+        unbiased_files, biased_files = self._get_files()
 
-        if filecount == 0:
-            return None
-        # Determine recent exclusion count
-        recent_exclude_count = 10 if filecount >= 20 else math.floor(filecount / 2)
-        # Build exclusion set from recent queue (up to recent_exclude_count)
-        recent_set = set(list(self.recent_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
-        # Attempt to get eligible files (not in recent or ever_selected)
-        eligible = [f for f in all_files if f not in self.ever_selected and f not in recent_set]
-        # If none left, reset ever_selected and try again
-        if not eligible:
-            self.ever_selected.clear()
-            eligible = [f for f in all_files if f not in recent_set]
-            if not eligible:
-                return None  # Still nothing eligible
-        selected = random.choice(eligible)
-        self.recent_files_queue.append(selected)
-        self.ever_selected.add(selected)
-        end_time = datetime.now(UTC)
-        duration1_ms = (mid_time - start_time).total_seconds() * 1000
-        duration2_ms = (end_time - mid_time).total_seconds() * 1000
-        print(f"scanned files in: {duration1_ms:.2f} ms, selected file in: {duration2_ms:.2f} ms")
-        return selected
+        if len(biased_files) == 0:
+            # simple case where there's no biased files
+            if len(unbiased_files) == 0:
+                return None
+            recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(unbiased_files) / 2))
+            recent_unbiased_set = set(list(self.recent_unbiased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
+            eligible_unbiased_files = [f for f in unbiased_files if f not in self.unbiased_files_set and f not in recent_unbiased_set]
+            if not eligible_unbiased_files:
+                self.unbiased_files_set.clear()
+                eligible_unbiased_files = [f for f in unbiased_files if f not in recent_unbiased_set]
+                # since len(unbiased_files) > recent_exclude_count, we can be certain that eligible_unbiased_files is currently not empty
+            selected_file = random.choice(eligible_unbiased_files)
+            self.recent_unbiased_files_queue.append(selected_file)
+            self.unbiased_files_set.add(selected_file)
+            return selected_file
+
+        #complex case where there's biased files
+
+        # first get the eligible unbiased_files 
+        recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(unbiased_files) / 2))
+        recent_unbiased_set = set(list(self.recent_unbiased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
+        eligible_unbiased_files = [f for f in unbiased_files if f not in self.unbiased_files_set and f not in recent_unbiased_set]
+        remaining_unbiased_file_count = sum(1 for f in unbiased_files if f not in self.unbiased_files_set)
+        if len(eligible_unbiased_files) == 0 and remaining_unbiased_file_count > 0:
+            print("[WARN] unexpected situation in random filepicker logic") # I don't think this is possible, but hard to definitively prove
+            remaining_unbiased_file_count = 0
+
+        # next get the eligible biased files
+        recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(biased_files) / 2))
+        recent_biased_set = set(list(self.recent_biased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
+        eligible_biased_files = [f for f in biased_files if f not in self.biased_files_set and f not in recent_biased_set]
+        remaining_biased_file_count_this_iteration = sum(1 for f in biased_files if f not in self.biased_files_set)
+        if len(eligible_biased_files) == 0 and remaining_biased_file_count_this_iteration > 0:
+            print("[WARN] unexpected situation in random filepicker logic") # I don't think this is possible, but hard to definitively prove
+            remaining_biased_file_count_this_iteration = 0
+        remaining_bias_iterations = settings.bias_factor - 1 - self.bias_iteration_index
+        remaining_biased_file_count = remaining_biased_file_count_this_iteration + (remaining_bias_iterations * len(biased_files))
+
+        # handle bias iterations and complete resets
+        if (remaining_biased_file_count == 0 and remaining_unbiased_file_count == 0):
+            # complete reset
+            print("complete reset")
+            self.bias_iteration_index = 0
+            self.unbiased_files_set.clear()
+            eligible_unbiased_files = [f for f in unbiased_files if f not in recent_unbiased_set]
+            remaining_unbiased_file_count = len(unbiased_files)
+            self.biased_files_set.clear()
+            eligible_biased_files = [f for f in biased_files if f not in recent_biased_set]
+            remaining_biased_file_count = len(biased_files) * settings.bias_factor
+        elif remaining_biased_file_count_this_iteration == 0 and self.bias_iteration_index < (settings.bias_factor - 1):
+            # go to next bias iteration
+            print("next bias iteration")
+            self.bias_iteration_index += 1
+            self.biased_files_set.clear()
+            eligible_biased_files = [f for f in unbiased_files if f not in recent_biased_set]
+            remaining_biased_file_count = len(biased_files) * (settings.bias_factor - self.bias_iteration_index)
+
+        # choose whether to select from bias or unbiased files
+        bias_chance = remaining_biased_file_count / (remaining_biased_file_count + remaining_unbiased_file_count)
+        is_bias = random.random() < bias_chance
+        print(f"unbiased_ct={remaining_unbiased_file_count}, bias_ct={remaining_biased_file_count}, chance={bias_chance:.3f}, is_bias={is_bias}")
+        if is_bias:
+            selected_file = random.choice(eligible_biased_files)
+            self.recent_biased_files_queue.append(selected_file)
+            self.biased_files_set.add(selected_file)
+        else:
+            selected_file = random.choice(eligible_unbiased_files)
+            self.recent_unbiased_files_queue.append(selected_file)
+            self.unbiased_files_set.add(selected_file)
+        return selected_file
 
     def _get_duration_ms(self, location):
         path = os.path.abspath(location)
@@ -497,28 +551,25 @@ class ClipInfoManager:
         return duration_ns / Gst.MSECOND
 
     def _get_files(self):
-        video_files = []
-
-        white_contain_pattern = None
-        white_startswith_list = None
-        black_contain_pattern = None
-        black_startswith_list = None
-        any_filters = False
-        if settings.whitelist_path_contains_csv:
-            any_filters = True
-            whitelist_terms_lower = [term.lower() for term in settings.whitelist_path_contains_csv.split(",") if term.strip()]
-            white_contain_pattern = re.compile("|".join(re.escape(term) for term in whitelist_terms_lower))
-        if settings.whitelist_path_startswith_csv:
-            any_filters = True
-            white_startswith_list = [term.lower() for term in settings.whitelist_path_startswith_csv.split(",") if term.strip()]
-        if settings.blacklist_path_contains_csv:
-            any_filters = True
-            blacklist_terms_lower = [term.lower() for term in settings.blacklist_path_contains_csv.split(",") if term.strip()]
-            black_contain_pattern = re.compile("|".join(re.escape(term) for term in blacklist_terms_lower))
-        if settings.blacklist_path_startswith_csv:
-            any_filters = True
-            black_startswith_list = [term.lower() for term in settings.blacklist_path_startswith_csv.split(",") if term.strip()]
-
+        unbiased_files = []
+        biased_files = []
+        def get_contain_pattern(csv):
+            if not csv:
+                return None
+            lower_terms = [term.strip().lower() for term in csv.split(",") if term.strip()]
+            return re.compile("|".join(re.escape(term) for term in lower_terms))
+        def get_startswith_list(csv):
+            if not csv:
+                return None
+            return [term.strip().lstrip("/").lower() for term in csv.split(",") if term.strip()]
+        exclude_startswith_list = get_startswith_list(settings.exclude_startswith_csv)
+        exclude_contains_pattern = get_contain_pattern(settings.exclude_contains_csv)
+        exclude_notstartswith_list = get_startswith_list(settings.exclude_notstartswith_csv)
+        exclude_notcontains_pattern = get_contain_pattern(settings.exclude_notcontains_csv)
+        bias_startswith_list = get_startswith_list(settings.bias_startswith_csv)
+        bias_contains_pattern = get_contain_pattern(settings.bias_contains_csv)
+        bias_notstartswith_list = get_startswith_list(settings.bias_notstartswith_csv)
+        bias_notcontains_pattern = get_contain_pattern(settings.bias_notcontains_csv)
         stack = [settings.input_base_dir]
         while stack:
             current_dir = stack.pop()
@@ -526,23 +577,29 @@ class ClipInfoManager:
                 for entry in it:
                     if entry.is_dir():
                         stack.append(entry.path)
-                    elif entry.is_file():
-                        if not os.path.splitext(entry.name)[1].lower() in self.video_extensions:
-                            continue
-                        if not any_filters: # since this is a very common case, handle it now for best performance
-                            video_files.append(entry.path)
-                            continue
-                        path = os.path.relpath(entry.path, start=settings.input_base_dir).lower()
-                        if white_startswith_list and not any(path.startswith(p) for p in white_startswith_list):
-                            continue
-                        if white_contain_pattern and not bool(white_contain_pattern.search(path)): 
-                            continue
-                        if black_startswith_list and any(path.startswith(p) for p in black_startswith_list):
-                            continue
-                        if black_contain_pattern and bool(black_contain_pattern.search(path)): 
-                            continue
-                        video_files.append(entry.path)
-        return video_files
+                    elif not entry.is_file():
+                        continue 
+                    if not os.path.splitext(entry.name)[1].lower() in self.video_extensions:
+                        continue
+                    path = os.path.relpath(entry.path, start=settings.input_base_dir).lower()
+                    if exclude_startswith_list and any(path.startswith(p) for p in exclude_startswith_list):
+                        continue
+                    if exclude_contains_pattern and bool(exclude_contains_pattern.search(path)): 
+                        continue
+                    if exclude_notstartswith_list and not any(path.startswith(p) for p in exclude_notstartswith_list):
+                        continue
+                    if exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(path)): 
+                        continue
+                    if (
+                        (bias_startswith_list and any(path.startswith(p) for p in bias_startswith_list))
+                        or (bias_contains_pattern and bool(bias_contains_pattern.search(path)))
+                        or (bias_notstartswith_list and not any(path.startswith(p) for p in bias_notstartswith_list))
+                        or (bias_notcontains_pattern and not bool(bias_notcontains_pattern.search(path)))
+                    ):
+                        biased_files.append(entry.path)
+                    else:
+                        unbiased_files.append(entry.path)
+        return (unbiased_files, biased_files)
 
 class FileBin(Gst.Bin):
     __gsignals__ = {
