@@ -36,7 +36,7 @@ settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80"
 settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
 settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 settings.width = int(os.getenv("WIDTH", "1280"))
-settings.height = int(os.getenv("WIDTH", "720"))
+settings.height = int(os.getenv("HEIGHT", "720"))
 
 settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip()
 settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
