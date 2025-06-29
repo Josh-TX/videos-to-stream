@@ -13,7 +13,7 @@ gi.require_version("GstController", "1.0")
 from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 
 # the initial pipeline looks like this
-# videotestsrc -> videoconvert -> capsfilter -> compositor c -> x264enc -> queue -> mpegtsmux m -> hlssink
+# videotestsrc -> videoconvert -> capsfilter -> compositor c -> textoverlay -> x264enc -> queue -> mpegtsmux m -> hlssink
 # audiomixer am -> avenc_aac -> queue -> m
 
 # The filebin element internally contains the following: 
@@ -25,18 +25,20 @@ Gst.init(None)
 class Settings:
     pass
 settings = Settings()
-settings.max_clip_duration_ms = math.floor(float(os.getenv("MAX_CLIP_DURATION_S", "60")) * 1000)
-if float(os.getenv("MAX_CLIP_DURATION_M", "0")) > 0:
-    settings.max_clip_duration_ms = math.floor(float(os.getenv("MAX_CLIP_DURATION_M", "0")) * 60 * 1000)
+settings.clip_duration_ms = math.floor(float(os.getenv("CLIP_DURATION_S", "60")) * 1000)
+if float(os.getenv("CLIP_DURATION_M", "0")) > 0:
+    settings.clip_duration_ms = math.floor(float(os.getenv("CLIP_DURATION_M", "0")) * 60 * 1000)
 settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "2")) * 1000)
 settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", "0")) * 1000)
-settings.max_clips_per_file = math.floor(float(os.getenv("MAX_CLIPS_PER_FILE", "1")))
+settings.clips_per_file = math.floor(float(os.getenv("CLIPS_PER_FILE", "1")))
 settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "3")) * 1000)
 settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
 settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
 settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("HEIGHT", "720"))
+
+settings.font_size = int(os.getenv("FONT_SIZE", "6"))
 
 settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip()
 settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
@@ -66,6 +68,7 @@ class HLSPipelineManager:
         self.pipeline = Gst.Pipeline.new("hls-pipeline")
         self.clock = self.pipeline.get_clock()
         self.clipinfo_manager = ClipInfoManager()
+        self.displayed_text = " stream is starting..." if settings.font_size > 0 else ""
         self.clips = []
         self._setup_pipeline()
 
@@ -75,6 +78,7 @@ class HLSPipelineManager:
         videoconvert = Gst.ElementFactory.make("videoconvert", None)
         videocapsfilter = Gst.ElementFactory.make("capsfilter", None)
         self.compositor = Gst.ElementFactory.make("compositor", None)
+        self.textoverlay = Gst.ElementFactory.make("textoverlay", None)
         x264enc = Gst.ElementFactory.make("x264enc", None)
         videoqueue = Gst.ElementFactory.make("queue", None)
         # audio elements
@@ -90,7 +94,7 @@ class HLSPipelineManager:
         hlssink = Gst.ElementFactory.make("hlssink", None)
 
         elements = [
-            videotestsrc, videoconvert, videocapsfilter, self.compositor, x264enc, videoqueue,
+            videotestsrc, videoconvert, videocapsfilter, self.compositor, self.textoverlay, x264enc, videoqueue,
             audiotestsrc, audioconvert, audioresample, audiocapsfilter, self.audiomixer, faac, audioqueue, 
             mpegtsmux, hlssink
         ]
@@ -103,6 +107,17 @@ class HLSPipelineManager:
         videotestsrc.set_property("is-live", True)
         videotestsrc.set_property("pattern", "ball")
         videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
+        
+        self.textoverlay.set_property("text", self.displayed_text)
+        self.textoverlay.set_property("halignment", "left")
+        self.textoverlay.set_property("wrap-mode", "none")
+        self.textoverlay.set_property("valignment", "bottom")
+        self.textoverlay.set_property("font-desc", f"Sans, {settings.font_size}")
+        self.textoverlay.set_property("xpad", 0)
+        self.textoverlay.set_property("ypad", 0)
+        self.textoverlay.set_property("draw-outline", False)
+        self.textoverlay.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self.text_overlay_probe_callback)
+
 
         hlssink.set_property("location", os.path.join(settings.output_dir, "segment%05d.ts"))
         hlssink.set_property("playlist-location", os.path.join(settings.output_dir, "playlist.m3u8"))
@@ -122,7 +137,8 @@ class HLSPipelineManager:
         compositor_pad.set_property("alpha", 1)
         compositor_pad.set_property("zorder", 0)
         videocapsfilter.get_static_pad("src").link(compositor_pad)
-        self.compositor.link(x264enc)
+        self.compositor.link(self.textoverlay)
+        self.textoverlay.link(x264enc)
         x264enc.link(videoqueue)
         videoqueue.link(mpegtsmux)
 
@@ -190,7 +206,7 @@ class HLSPipelineManager:
         clip.fadein_t = fadein_t
         ms_between_fades = clip.duration_ms - clip.fadeout_ms
         clip.fadeout_t = fadein_t + ms_between_fades * Gst.MSECOND
-        clip.filebin = FileBin(clip.location, clip.seek_ms)
+        clip.filebin = FileBin(clip.filepath, clip.seek_ms)
         clip.filebin.connect("ready", on_ready)
         self.clips.append(clip)
         return clip.fadeout_t
@@ -293,7 +309,7 @@ class HLSPipelineManager:
 
             def force_cleanup():
                 if not old_clip.cleanup_scheduled:
-                    print("RESORTING TO FORCE CLEANUP")
+                    print("RESORTING TO FORCE CLEANUP (not good)")
                     #Are the buffers behind? Or maybe we scheduled beyond the file's end?
                     old_clip.cleanup_scheduled = True
                     if not old_clip.audio_finished and audio_probe_id:
@@ -345,20 +361,34 @@ class HLSPipelineManager:
         with open(settings.last_activity_file, "w") as f:
             f.write(future_time.isoformat())
 
-    def is_playing(self):
-        success, state, pending = self.pipeline.get_state(0)
-        return state == Gst.State.PLAYING
-
-    def pause(self):
-        print("pause")
-        self.pipeline.set_state(Gst.State.PAUSED)
-        return False
-
-    def resume(self):
-        print("resume")
-        self.pipeline.set_state(Gst.State.PLAYING)
-        return False
-
+    def text_overlay_probe_callback(self, pad, info):
+        if settings.font_size == 0:
+            if not self.displayed_text == "":
+                self.displayed_text = ""
+                self.textoverlay.set_property("text", self.displayed_text)
+            return Gst.PadProbeReturn.OK
+        buf = info.get_buffer()
+        if not buf:
+            return Gst.PadProbeReturn.OK
+        active_clip = max(
+            (c for c in self.clips if buf.pts >= c.fadein_t + int(0.5 * c.fadein_ms * Gst.MSECOND)),
+            key=lambda c: c.fadein_t,
+            default=None)
+        if not active_clip:
+            return Gst.PadProbeReturn.OK
+        time_ns = buf.pts - active_clip.fadein_t + active_clip.filebin.segment_start_ns + settings.preroll_ms * Gst.MSECOND
+        seconds = time_ns // Gst.SECOND
+        minutes = seconds // 60
+        hours = minutes // 60
+        if hours >= 1:
+            time_str = f"{hours:02}:{minutes % 60:02}:{seconds % 60:02}"
+        else:
+            time_str = f"{minutes:02}:{seconds % 60:02}"
+        new_display_text = f" {time_str}   {active_clip.filepath}"
+        if self.displayed_text != new_display_text:
+            self.displayed_text = new_display_text
+            self.textoverlay.set_property("text", self.displayed_text)
+        return Gst.PadProbeReturn.OK
     def run(self):
         self.pipeline.set_state(Gst.State.PLAYING)
         print(f"[INFO] HLS pipeline is running. Serving segments in {settings.output_dir}")
@@ -384,8 +414,8 @@ class HLSPipelineManager:
         print("[INFO] Pipeline stopped.")
 
 class ClipInfo:
-    def __init__(self, location, seek_ms, duration_ms, fadein_ms, fadeout_ms):
-        self.location = location
+    def __init__(self, filepath, seek_ms, duration_ms, fadein_ms, fadeout_ms):
+        self.filepath = filepath
         self.seek_ms = seek_ms
         self.duration_ms = duration_ms
         self.fadein_ms = fadein_ms
@@ -417,28 +447,28 @@ class ClipInfoManager:
         return self.clipinfo_queue.popleft()
 
     def _get_more_clipinfos(self):
-        location = self._next_file()
-        if not location:
-            raise FileNotFoundError(f"[ERROR] no video files in {settings.input_base_dir}")
-        file_duration_ms = math.floor(self._get_duration_ms(location))
-        duration_w_inter_transitions = settings.max_clip_duration_ms + (settings.inter_transition_ms * 2)
+        filepath = self._next_file()
+        if not filepath:
+            raise FileNotFoundError(self._get_error_message())
+        file_duration_ms = math.floor(self._get_duration_ms(filepath))
+        duration_w_inter_transitions = settings.clip_duration_ms + (settings.inter_transition_ms * 2)
 
         def simple_case():
             clip_duration_ms = min(duration_w_inter_transitions, file_duration_ms)
             startrange_ms = file_duration_ms - clip_duration_ms
             seek_ms = random.randint(0, startrange_ms)
-            return [ClipInfo(location, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms)]
+            return [ClipInfo(filepath, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms)]
 
         # first check if we're in the simple case where it's obvious there's just 1 clip for this file
-        if settings.max_clips_per_file <= 1 or file_duration_ms < (duration_w_inter_transitions + settings.max_clip_duration_ms):
+        if settings.clips_per_file <= 1 or file_duration_ms < (duration_w_inter_transitions + settings.clip_duration_ms):
             return simple_case()
 
         # step 1: compute clip count
         ms_after_first_clip = file_duration_ms - duration_w_inter_transitions # must result in a positive number because of the earlier check
-        duration_w_intra_transitions = settings.max_clip_duration_ms + (settings.intra_transition_ms * 2)
+        duration_w_intra_transitions = settings.clip_duration_ms + (settings.intra_transition_ms * 2)
         max_clips_due_to_gaps = 1 + (ms_after_first_clip // (duration_w_intra_transitions + settings.intra_file_min_gap_ms))
         max_clips_due_to_percent = file_duration_ms // settings.intra_file_max_percent
-        clip_count = min(max_clips_due_to_gaps, max_clips_due_to_percent, settings.max_clips_per_file)
+        clip_count = min(max_clips_due_to_gaps, max_clips_due_to_percent, settings.clips_per_file)
         if clip_count <= 1:
             return simple_case()
 
@@ -464,13 +494,21 @@ class ClipInfoManager:
             fadeout_transition_ms = settings.inter_transition_ms if i == (space_count - 1) else settings.intra_transition_ms
             clip_duration_ms = duration_w_intra_transitions
             if i == 0 or i == space_count - 1:
-                clip_duration_ms = settings.max_clip_duration_ms + settings.inter_transition_ms + settings.intra_transition_ms
-            clipinfos.append(ClipInfo(location, seek_ms, clip_duration_ms, fadein_transition_ms, fadeout_transition_ms))
+                clip_duration_ms = settings.clip_duration_ms + settings.inter_transition_ms + settings.intra_transition_ms
+            clipinfos.append(ClipInfo(filepath, seek_ms, clip_duration_ms, fadein_transition_ms, fadeout_transition_ms))
             seek_ms += clip_duration_ms
         return clipinfos
 
+    def _get_error_message(self):
+        if not os.listdir(settings.input_base_dir):
+            return "[ERROR] no video file to play. The /media directory is empty"
+        unbiased_files, biased_files = self._get_files(False) # get files but with no exclusion filters
+        if unbiased_files or biased_files:
+            return "[ERROR] no video file to play. The EXCLUDE settings filtered out all video files"
+        return "[ERROR] no video file to play. The /media directory contains no video files"
+
     def _next_file(self):
-        unbiased_files, biased_files = self._get_files()
+        unbiased_files, biased_files = self._get_files(True)
 
         if len(biased_files) == 0:
             # simple case where there's no biased files
@@ -543,14 +581,14 @@ class ClipInfoManager:
             self.unbiased_files_set.add(selected_file)
         return selected_file
 
-    def _get_duration_ms(self, location):
-        path = os.path.abspath(location)
+    def _get_duration_ms(self, filepath):
+        path = os.path.join(settings.input_base_dir, filepath) 
         uri = f"file://{path}"
         info = self.discoverer.discover_uri(uri)
         duration_ns = info.get_duration()
         return duration_ns / Gst.MSECOND
 
-    def _get_files(self):
+    def _get_files(self, enable_filters):
         unbiased_files = []
         biased_files = []
         def get_contain_pattern(csv):
@@ -581,24 +619,26 @@ class ClipInfoManager:
                         continue 
                     if not os.path.splitext(entry.name)[1].lower() in self.video_extensions:
                         continue
-                    path = os.path.relpath(entry.path, start=settings.input_base_dir).lower()
-                    if exclude_startswith_list and any(path.startswith(p) for p in exclude_startswith_list):
-                        continue
-                    if exclude_contains_pattern and bool(exclude_contains_pattern.search(path)): 
-                        continue
-                    if exclude_notstartswith_list and not any(path.startswith(p) for p in exclude_notstartswith_list):
-                        continue
-                    if exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(path)): 
-                        continue
+                    path = os.path.relpath(entry.path, start=settings.input_base_dir)
+                    lower_path = path.lower()
+                    if enable_filters:
+                        if exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list):
+                            continue
+                        if exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)): 
+                            continue
+                        if exclude_notstartswith_list and not any(lower_path.startswith(p) for p in exclude_notstartswith_list):
+                            continue
+                        if exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(lower_path)): 
+                            continue
                     if (
-                        (bias_startswith_list and any(path.startswith(p) for p in bias_startswith_list))
-                        or (bias_contains_pattern and bool(bias_contains_pattern.search(path)))
-                        or (bias_notstartswith_list and not any(path.startswith(p) for p in bias_notstartswith_list))
-                        or (bias_notcontains_pattern and not bool(bias_notcontains_pattern.search(path)))
+                        (bias_startswith_list and any(lower_path.startswith(p) for p in bias_startswith_list))
+                        or (bias_contains_pattern and bool(bias_contains_pattern.search(lower_path)))
+                        or (bias_notstartswith_list and not any(lower_path.startswith(p) for p in bias_notstartswith_list))
+                        or (bias_notcontains_pattern and not bool(bias_notcontains_pattern.search(lower_path)))
                     ):
-                        biased_files.append(entry.path)
+                        biased_files.append(path)
                     else:
-                        unbiased_files.append(entry.path)
+                        unbiased_files.append(path)
         return (unbiased_files, biased_files)
 
 class FileBin(Gst.Bin):
@@ -607,11 +647,11 @@ class FileBin(Gst.Bin):
         "started": (GObject.SignalFlags.RUN_FIRST, None, ())
     }
     _instance_count = 0
-    def __init__(self, location, seek_ms):
+    def __init__(self, filepath, seek_ms):
         super().__init__()
         FileBin._instance_count += 1
-        print(f"Created Filebin for {location}. Active Filebin Count: {FileBin._instance_count}")
-        self.location = location
+        print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
+        location = os.path.join(settings.input_base_dir, filepath)
         self.seek_ms = seek_ms
         self.pad_states = {"video": False, "audio": False}
         self.video_block_probe_id = None
@@ -633,7 +673,7 @@ class FileBin(Gst.Bin):
         self.audiocapsfilter = Gst.ElementFactory.make("capsfilter", None)
         self.audio_identity = Gst.ElementFactory.make("identity", None)
         
-        self.filesrc.set_property("location", self.location)
+        self.filesrc.set_property("location", location)
         self.videoscale.set_property("add-borders", True)
         self.vcapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
         self.audiocapsfilter.set_property("caps", Gst.Caps.from_string("audio/x-raw, format=F32LE,rate=44100,channels=2"))

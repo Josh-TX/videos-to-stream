@@ -26,15 +26,16 @@ Here's a complete list of all settings
 
 | environmental var | default | data type | description |
 | --- | ----- | -----| ----- |
-MAX_CLIP_DURATION_S | 60 | decimal | The duration (in seconds) of each clip, not including crossfade time. If a file's total duration is less than MAX_CLIP_DURATION_S, then the clip's duration will just be the file's duration
-MAX_CLIP_DURATION_M | | decimal | The duration (in minutes) of each clip. When specified, will override MAX_CLIP_DURATION_S
+CLIP_DURATION_S | 60 | decimal | The duration (in seconds) of each clip, not including crossfade time. If a file's total duration is less than CLIP_DURATION_S, then the clip's duration will just be the file's duration
+CLIP_DURATION_M | | decimal | The duration (in minutes) of each clip. When specified, will override CLIP_DURATION_S
 INTER_TRANSITION_S | 2 | decimal | The duration (in seconds) of the crossfade when transitioning from one file to another file
 INTRA_TRANSITION_S | 0 | decimal | The duration (in seconds) of the crossfade when transitioning from one clip to the next clip within the same file
-MAX_CLIPS_PER_FILE | 1 | int | When a file is selected, determines how many clips to play from that file. Clips will be played in chronological order
-INTRA_FILE_MIN_GAP_S | 3 | decimal | when there's multiple clips per file, determines the minimum amount of time between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file
+CLIPS_PER_FILE | 1 | int | When a file is selected, determines how many clips to play from that file. Clips will be played in chronological order without any overlap. If CLIPS_PER_FILE is too high, then it'll play as many clips as it can given all the constraints (such as clip duration). 
+INTRA_FILE_MIN_GAP_S | 3 | decimal | When there's multiple clips per file, determines the minimum seconds between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file
 INTRA_FILE_MAX_PERCENT | 80 | percent | Another way to limit the max clips per file. If a file is 10 minutes long, a value of 80 means that you it can't play more than 8 minutes worth of clips.
-WIDTH | 1280 | int | the width (in pixels) of the output stream
-HEIGHT | 720 | int | the height (in pixels) of the output stream
+FONT_SIZE | 6 | int | The size of the text in the bottom-left corner that shows the currently-playing file and position. Set it to 0 to hide this text
+WIDTH | 1280 | int | The width (in pixels) of the output stream
+HEIGHT | 720 | int | The height (in pixels) of the output stream
 PREROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the beginning of a clip prior to changing the clip's volume and alpha. 
 POSTROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the end after changing the clip's volume and alpha
 EXCLUDE_STARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path starts with any of the search terms, it'll be excluded from being played. Sorta like a blacklist 
@@ -49,8 +50,6 @@ BIAS_FACTOR | 2 | int | A factor for how often biased videos are selected. A bia
 
 Note that a video is either biased or not biased. Having both contains and startswith matching a video doesn't make it doubly-biased or something. 
 
-Even though each file path is something like `/media/favorites/vid.mp4`, the path is trimmed to just `favorites/vid.mp4` when evaluating each startswith term. This means you should NOT prefix your startswith with a `/`. 
-
 # Notes on randomization
 
-Although I call it "random", the logic is very complex to ensure every file eventually gets played, and recently-played files don't come up again too soon, all while not being a predictable pattern, and also being adaptable to changes to the /media directory contents. 
+The randomization logic is very complex to ensure every file eventually gets played, and recently-played files don't come up again too soon, all while not being a predictable pattern, and also being adaptable to changes to the /media directory contents.
