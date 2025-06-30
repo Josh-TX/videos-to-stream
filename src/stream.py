@@ -33,12 +33,14 @@ settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", 
 settings.clips_per_file = math.floor(float(os.getenv("CLIPS_PER_FILE", "1")))
 settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "3")) * 1000)
 settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
-settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
-settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
+
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("HEIGHT", "720"))
-
+settings.x_crop_percent = float(os.getenv("X_CROP_PERCENT", "0")) / 100
+settings.y_crop_percent = float(os.getenv("Y_CROP_PERCENT", "0")) / 100
 settings.font_size = int(os.getenv("FONT_SIZE", "6"))
+settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
+settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
 
 settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip()
 settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
@@ -206,7 +208,7 @@ class HLSPipelineManager:
         clip.fadein_t = fadein_t
         ms_between_fades = clip.duration_ms - clip.fadeout_ms
         clip.fadeout_t = fadein_t + ms_between_fades * Gst.MSECOND
-        clip.filebin = FileBin(clip.filepath, clip.seek_ms)
+        clip.filebin = FileBin(clip.filepath, clip.seek_ms, clip.width, clip.height)
         clip.filebin.connect("ready", on_ready)
         self.clips.append(clip)
         return clip.fadeout_t
@@ -384,7 +386,7 @@ class HLSPipelineManager:
             time_str = f"{hours:02}:{minutes % 60:02}:{seconds % 60:02}"
         else:
             time_str = f"{minutes:02}:{seconds % 60:02}"
-        new_display_text = f" {time_str}   {active_clip.filepath}"
+        new_display_text = f" {time_str}   {os.path.splitext(active_clip.filepath)[0]}"
         if self.displayed_text != new_display_text:
             self.displayed_text = new_display_text
             self.textoverlay.set_property("text", self.displayed_text)
@@ -414,12 +416,15 @@ class HLSPipelineManager:
         print("[INFO] Pipeline stopped.")
 
 class ClipInfo:
-    def __init__(self, filepath, seek_ms, duration_ms, fadein_ms, fadeout_ms):
+    def __init__(self, filepath, seek_ms, duration_ms, fadein_ms, fadeout_ms, width, height):
         self.filepath = filepath
         self.seek_ms = seek_ms
         self.duration_ms = duration_ms
         self.fadein_ms = fadein_ms
         self.fadeout_ms = fadeout_ms
+        self.width = width
+        self.height = height
+
         self.fadein_t = None
         self.fadeout_t = None
         self.audio_control_source = None
@@ -450,14 +455,14 @@ class ClipInfoManager:
         filepath = self._next_file()
         if not filepath:
             raise FileNotFoundError(self._get_error_message())
-        file_duration_ms = math.floor(self._get_duration_ms(filepath))
+        file_duration_ms, width, height = self._get_media_info(filepath)
         duration_w_inter_transitions = settings.clip_duration_ms + (settings.inter_transition_ms * 2)
 
         def simple_case():
             clip_duration_ms = min(duration_w_inter_transitions, file_duration_ms)
             startrange_ms = file_duration_ms - clip_duration_ms
             seek_ms = random.randint(0, startrange_ms)
-            return [ClipInfo(filepath, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms)]
+            return [ClipInfo(filepath, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms, width, height)]
 
         # first check if we're in the simple case where it's obvious there's just 1 clip for this file
         if settings.clips_per_file <= 1 or file_duration_ms < (duration_w_inter_transitions + settings.clip_duration_ms):
@@ -495,7 +500,7 @@ class ClipInfoManager:
             clip_duration_ms = duration_w_intra_transitions
             if i == 0 or i == space_count - 1:
                 clip_duration_ms = settings.clip_duration_ms + settings.inter_transition_ms + settings.intra_transition_ms
-            clipinfos.append(ClipInfo(filepath, seek_ms, clip_duration_ms, fadein_transition_ms, fadeout_transition_ms))
+            clipinfos.append(ClipInfo(filepath, seek_ms, clip_duration_ms, fadein_transition_ms, fadeout_transition_ms, width, height))
             seek_ms += clip_duration_ms
         return clipinfos
 
@@ -581,12 +586,22 @@ class ClipInfoManager:
             self.unbiased_files_set.add(selected_file)
         return selected_file
 
-    def _get_duration_ms(self, filepath):
+    def _get_media_info(self, filepath):
         path = os.path.join(settings.input_base_dir, filepath) 
         uri = f"file://{path}"
         info = self.discoverer.discover_uri(uri)
         duration_ns = info.get_duration()
-        return duration_ns / Gst.MSECOND
+
+        width = height = None
+        for stream in info.get_stream_list():
+            if isinstance(stream, GstPbutils.DiscovererVideoInfo):
+                caps = stream.get_caps()
+                if caps:
+                    structure = caps.get_structure(0)
+                    width = structure.get_value("width")
+                    height = structure.get_value("height")
+                break  # Only look at first video stream
+        return (math.floor(duration_ns / Gst.MSECOND), width, height)
 
     def _get_files(self, enable_filters):
         unbiased_files = []
@@ -647,7 +662,7 @@ class FileBin(Gst.Bin):
         "started": (GObject.SignalFlags.RUN_FIRST, None, ())
     }
     _instance_count = 0
-    def __init__(self, filepath, seek_ms):
+    def __init__(self, filepath, seek_ms, width, height):
         super().__init__()
         FileBin._instance_count += 1
         print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
@@ -662,35 +677,38 @@ class FileBin(Gst.Bin):
         self.time_started = None
 
         # Create elements
-        self.filesrc = Gst.ElementFactory.make("filesrc", None)
+        filesrc = Gst.ElementFactory.make("filesrc", None)
         self.decodebin = Gst.ElementFactory.make("decodebin", None)
         self.video_identity = Gst.ElementFactory.make("identity", None)
         self.videoconvert = Gst.ElementFactory.make("videoconvert", None)
-        self.videoscale = Gst.ElementFactory.make("videoscale", None)
+        videocrop = Gst.ElementFactory.make("videocrop", None)
+        videoscale = Gst.ElementFactory.make("videoscale", None)
         self.vcapsfilter = Gst.ElementFactory.make("capsfilter", None)
         self.audioconvert = Gst.ElementFactory.make("audioconvert", None)
-        self.audioresample = Gst.ElementFactory.make("audioresample", None)
-        self.audiocapsfilter = Gst.ElementFactory.make("capsfilter", None)
+        audioresample = Gst.ElementFactory.make("audioresample", None)
+        audiocapsfilter = Gst.ElementFactory.make("capsfilter", None)
         self.audio_identity = Gst.ElementFactory.make("identity", None)
         
-        self.filesrc.set_property("location", location)
-        self.videoscale.set_property("add-borders", True)
+        filesrc.set_property("location", location)
+        self._crop(videocrop, width, height)
+        videoscale.set_property("add-borders", True)
         self.vcapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
-        self.audiocapsfilter.set_property("caps", Gst.Caps.from_string("audio/x-raw, format=F32LE,rate=44100,channels=2"))
+        audiocapsfilter.set_property("caps", Gst.Caps.from_string("audio/x-raw, format=F32LE,rate=44100,channels=2"))
         elements = [
-            self.filesrc, self.decodebin,
-            self.video_identity, self.videoconvert, self.videoscale, self.vcapsfilter,
-            self.audioconvert, self.audioresample, self.audiocapsfilter, self.audio_identity
+            filesrc, self.decodebin,
+            self.video_identity, self.videoconvert, videocrop, videoscale, self.vcapsfilter,
+            self.audioconvert, audioresample, audiocapsfilter, self.audio_identity
         ]
         for e in elements:
             self.add(e)
 
-        self.filesrc.link(self.decodebin)
-        self.videoconvert.link(self.videoscale)
-        self.videoscale.link(self.vcapsfilter)
-        self.audioconvert.link(self.audioresample)
-        self.audioresample.link(self.audiocapsfilter)
-        self.audiocapsfilter.link(self.audio_identity)
+        filesrc.link(self.decodebin)
+        self.videoconvert.link(videocrop)
+        videocrop.link(videoscale)
+        videoscale.link(self.vcapsfilter)
+        self.audioconvert.link(audioresample)
+        audioresample.link(audiocapsfilter)
+        audiocapsfilter.link(self.audio_identity)
         self.pad_added_id = self.decodebin.connect("pad-added", self._on_pad_added)
         self.no_more_pads_id = self.decodebin.connect("no-more-pads",  self._on_no_more_pads)
         self.set_state(Gst.State.PAUSED)
@@ -752,6 +770,7 @@ class FileBin(Gst.Bin):
         self.decodebin.disconnect(self.pad_added_id)
         self.decodebin.disconnect(self.no_more_pads_id)
         GLib.timeout_add(10, self._perform_seek)
+
     def _perform_seek(self):
         success = self.decodebin.seek_simple(
             Gst.Format.TIME,
@@ -811,6 +830,31 @@ class FileBin(Gst.Bin):
             peer.push_event(new_event)
 
         return Gst.PadProbeReturn.DROP
+
+    def _crop(self, videocrop, width, height):
+        if not settings.x_crop_percent and not settings.y_crop_percent:
+            return
+        if not width or not height:
+            print("error getting width and height")
+            return
+        input_ratio = width / height
+        output_ratio = settings.width / settings.height
+        if abs(input_ratio - output_ratio) < 0.01:
+            return
+        if input_ratio > output_ratio: #input is wider than output
+            if not settings.x_crop_percent:
+                return
+            max_crop_px = width * settings.x_crop_percent
+            crop_px = min(width - height * output_ratio, max_crop_px)
+            videocrop.set_property('left', math.ceil(crop_px / 2))
+            videocrop.set_property('right', math.floor(crop_px / 2))
+        else: #input is taller than output
+            if not settings.y_crop_percent:
+                return
+            max_crop_px = height * settings.y_crop_percent
+            crop_px = min(height - width / output_ratio, max_crop_px)
+            videocrop.set_property('top', math.floor(crop_px / 2))
+            videocrop.set_property('bottom', math.ceil(crop_px / 2))
 
     def _get_time(self):
         pipeline = self.get_parent()
