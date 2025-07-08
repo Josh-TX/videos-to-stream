@@ -46,11 +46,19 @@ settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip(
 settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
 settings.exclude_notstartswith_csv = os.getenv("EXCLUDE_NOTSTARTSWITH_CSV", "").strip()
 settings.exclude_notcontains_csv = os.getenv("EXCLUDE_NOTCONTAINS_CSV", "").strip()
-settings.bias_startswith_csv = os.getenv("BIAS_STARTSWITH_CSV", "").strip()
-settings.bias_contains_csv = os.getenv("BIAS_CONTAINS_CSV", "").strip()
-settings.bias_notstartswith_csv = os.getenv("BIAS_NOTSTARTSWITH_CSV", "").strip()
-settings.bias_notcontains_csv = os.getenv("BIAS_NOTCONTAINS_CSV", "").strip()
-settings.bias_factor = int(os.getenv("BIAS_FACTOR", "2"))
+settings.boosted_startswith_csv = os.getenv("BOOSTED_STARTSWITH_CSV", "").strip()
+settings.boosted_contains_csv = os.getenv("BOOSTED_CONTAINS_CSV", "").strip()
+settings.boosted_notstartswith_csv = os.getenv("BOOSTED_NOTSTARTSWITH_CSV", "").strip()
+settings.boosted_notcontains_csv = os.getenv("BOOSTED_NOTCONTAINS_CSV", "").strip()
+settings.boosted_factor = int(os.getenv("BOOSTED_FACTOR", "2"))
+settings.suppressed_startswith_csv = os.getenv("SUPPRESSED_STARTSWITH_CSV", "").strip()
+settings.suppressed_contains_csv = os.getenv("SUPPRESSED_CONTAINS_CSV", "").strip()
+settings.suppressed_notstartswith_csv = os.getenv("SUPPRESSED_NOTSTARTSWITH_CSV", "").strip()
+settings.suppressed_notcontains_csv = os.getenv("SUPPRESSED_NOTCONTAINS_CSV", "").strip()
+settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
+
+settings.boosted_factor = int(os.getenv("BOOSTED_FACTOR", "2"))
+settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
 
 settings.input_base_dir = "/media"
 settings.output_dir = "./serve"
@@ -434,14 +442,12 @@ class ClipInfo:
 
 class ClipInfoManager:
     def __init__(self):
-        self.recent_unbiased_files_queue = deque(maxlen=settings.recent_file_queue_length)
-        self.recent_biased_files_queue = deque(maxlen=settings.recent_file_queue_length)
-        self.unbiased_files_set = set()
-        self.biased_files_set = set()
-        self.bias_iteration_index = 0
         self.clipinfo_queue = deque()
         self.discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
         self.video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm'}
+        self.suppressed_group = FileGroup()
+        self.neutral_group = FileGroup()
+        self.boosted_group = FileGroup()
 
     def next_clipinfo(self):
         if not self.clipinfo_queue:
@@ -453,6 +459,10 @@ class ClipInfoManager:
 
     def _get_more_clipinfos(self):
         filepath = self._next_file()
+        self.suppressed_group.cleanup()
+        self.neutral_group.cleanup()
+        self.boosted_group.cleanup()
+
         if not filepath:
             raise FileNotFoundError(self._get_error_message())
         file_duration_ms, width, height = self._get_media_info(filepath)
@@ -507,84 +517,76 @@ class ClipInfoManager:
     def _get_error_message(self):
         if not os.listdir(settings.input_base_dir):
             return "[ERROR] no video file to play. The /media directory is empty"
-        unbiased_files, biased_files = self._get_files(False) # get files but with no exclusion filters
-        if unbiased_files or biased_files:
+        suppressed_files, neutral_files, boosted_files = self._get_files(False) # get files but with no exclusion filters
+        if suppressed_files or neutral_files or boosted_files:
             return "[ERROR] no video file to play. The EXCLUDE settings filtered out all video files"
         return "[ERROR] no video file to play. The /media directory contains no video files"
 
     def _next_file(self):
-        unbiased_files, biased_files = self._get_files(True)
-
-        if len(biased_files) == 0:
-            # simple case where there's no biased files
-            if len(unbiased_files) == 0:
+        suppressed_files, neutral_files, boosted_files = self._get_files(True)
+        #print(f"suppressed_files={len(suppressed_files)}, neutral_files={len(neutral_files)}, boosted_files={len(boosted_files)}")
+        if len(suppressed_files) == 0 and len(boosted_files) == 0:
+            # simple case where there's only neutral files
+            if len(neutral_files) == 0:
                 return None
-            recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(unbiased_files) / 2))
-            recent_unbiased_set = set(list(self.recent_unbiased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
-            eligible_unbiased_files = [f for f in unbiased_files if f not in self.unbiased_files_set and f not in recent_unbiased_set]
-            if not eligible_unbiased_files:
-                self.unbiased_files_set.clear()
-                eligible_unbiased_files = [f for f in unbiased_files if f not in recent_unbiased_set]
-                # since len(unbiased_files) > recent_exclude_count, we can be certain that eligible_unbiased_files is currently not empty
-            selected_file = random.choice(eligible_unbiased_files)
-            self.recent_unbiased_files_queue.append(selected_file)
-            self.unbiased_files_set.add(selected_file)
-            return selected_file
+            self.neutral_group.setup(neutral_files, 1)
+            if not self.neutral_group.eligible_files:
+                self.neutral_group.next_iteration()
+            return self.neutral_group.select_file()
+        if len(suppressed_files) == 0:
+            # slightly-complex case where there's neutral and boosted files
+            self.neutral_group.setup(neutral_files, 1)
+            self.boosted_group.setup(boosted_files, settings.boosted_factor)
+            if self.neutral_group.remaining_total_file_count == 0 and self.boosted_group.remaining_total_file_count == 0:
+                self.neutral_group.next_iteration()
+                self.boosted_group.next_iteration()
+            boosted_chance = self.boosted_group.remaining_total_file_count / (self.boosted_group.remaining_total_file_count + self.neutral_group.remaining_total_file_count)
+            is_boosted = random.random() < boosted_chance
+            print(f"neutral={self.neutral_group.remaining_total_file_count}, boosted={self.boosted_group.remaining_total_file_count}, is_boosted={is_boosted}")
+            if is_boosted:
+                if not self.boosted_group.eligible_files:
+                    self.boosted_group.next_iteration()
+                return self.boosted_group.select_file()
+            else:
+                return self.neutral_group.select_file()
+        # complex case where there could be all 3
+        self.suppressed_group.setup(suppressed_files, 1)
+        self.neutral_group.setup(neutral_files, settings.suppressed_factor)
+        self.boosted_group.setup(boosted_files, settings.suppressed_factor * settings.boosted_factor)
+        #print(f"suppressed_group_c={self.suppressed_group.remaining_total_file_count}, neutral_group_c={self.neutral_group.remaining_total_file_count}, boosted_group_c={self.boosted_group.remaining_total_file_count}")
 
-        #complex case where there's biased files
-
-        # first get the eligible unbiased_files 
-        recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(unbiased_files) / 2))
-        recent_unbiased_set = set(list(self.recent_unbiased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
-        eligible_unbiased_files = [f for f in unbiased_files if f not in self.unbiased_files_set and f not in recent_unbiased_set]
-        remaining_unbiased_file_count = sum(1 for f in unbiased_files if f not in self.unbiased_files_set)
-        if len(eligible_unbiased_files) == 0 and remaining_unbiased_file_count > 0:
-            print("[WARN] unexpected situation in random filepicker logic") # I don't think this is possible, but hard to definitively prove
-            remaining_unbiased_file_count = 0
-
-        # next get the eligible biased files
-        recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(biased_files) / 2))
-        recent_biased_set = set(list(self.recent_biased_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
-        eligible_biased_files = [f for f in biased_files if f not in self.biased_files_set and f not in recent_biased_set]
-        remaining_biased_file_count_this_iteration = sum(1 for f in biased_files if f not in self.biased_files_set)
-        if len(eligible_biased_files) == 0 and remaining_biased_file_count_this_iteration > 0:
-            print("[WARN] unexpected situation in random filepicker logic") # I don't think this is possible, but hard to definitively prove
-            remaining_biased_file_count_this_iteration = 0
-        remaining_bias_iterations = settings.bias_factor - 1 - self.bias_iteration_index
-        remaining_biased_file_count = remaining_biased_file_count_this_iteration + (remaining_bias_iterations * len(biased_files))
-
-        # handle bias iterations and complete resets
-        if (remaining_biased_file_count == 0 and remaining_unbiased_file_count == 0):
-            # complete reset
-            print("complete reset")
-            self.bias_iteration_index = 0
-            self.unbiased_files_set.clear()
-            eligible_unbiased_files = [f for f in unbiased_files if f not in recent_unbiased_set]
-            remaining_unbiased_file_count = len(unbiased_files)
-            self.biased_files_set.clear()
-            eligible_biased_files = [f for f in biased_files if f not in recent_biased_set]
-            remaining_biased_file_count = len(biased_files) * settings.bias_factor
-        elif remaining_biased_file_count_this_iteration == 0 and self.bias_iteration_index < (settings.bias_factor - 1):
-            # go to next bias iteration
-            print("next bias iteration")
-            self.bias_iteration_index += 1
-            self.biased_files_set.clear()
-            eligible_biased_files = [f for f in unbiased_files if f not in recent_biased_set]
-            remaining_biased_file_count = len(biased_files) * (settings.bias_factor - self.bias_iteration_index)
-
-        # choose whether to select from bias or unbiased files
-        bias_chance = remaining_biased_file_count / (remaining_biased_file_count + remaining_unbiased_file_count)
-        is_bias = random.random() < bias_chance
-        print(f"unbiased_ct={remaining_unbiased_file_count}, bias_ct={remaining_biased_file_count}, chance={bias_chance:.3f}, is_bias={is_bias}")
-        if is_bias:
-            selected_file = random.choice(eligible_biased_files)
-            self.recent_biased_files_queue.append(selected_file)
-            self.biased_files_set.add(selected_file)
+        not_suppressed_count = self.neutral_group.remaining_total_file_count + self.boosted_group.remaining_total_file_count
+        if self.suppressed_group.remaining_total_file_count == 0 and not_suppressed_count == 0:
+            self.suppressed_group.next_iteration()
+            self.neutral_group.next_iteration()
+            self.boosted_group.next_iteration()
+            not_suppressed_count = self.neutral_group.remaining_total_file_count + self.boosted_group.remaining_total_file_count
+        suppressed_chance =  self.suppressed_group.remaining_total_file_count / ( self.suppressed_group.remaining_total_file_count + not_suppressed_count)
+        is_suppressed = random.random() < suppressed_chance
+        if is_suppressed:
+            print(f"suppressed={self.suppressed_group.remaining_total_file_count}, neutral={self.neutral_group.remaining_total_file_count}, boosted={self.boosted_group.remaining_total_file_count}, selected=suppressed")
+            return self.suppressed_group.select_file()
+        # at this point, it's either boosted or neutral. However, we multiplied by settings.suppressed_factor, and we want to reverse that affect
+        neutral_adjusted_file_count = self.neutral_group.get_adjusted_remaining_total_file_count(settings.suppressed_factor)
+        boosted_adjusted_file_count = self.boosted_group.get_adjusted_remaining_total_file_count(settings.suppressed_factor)
+        # now we can do basically the same thing as the slightly-complex case
+        if neutral_adjusted_file_count == 0 and boosted_adjusted_file_count == 0:
+            self.neutral_group.next_iteration()
+            self.boosted_group.next_iteration()
+            neutral_adjusted_file_count = self.neutral_group.get_adjusted_remaining_total_file_count(settings.suppressed_factor)
+            boosted_adjusted_file_count = self.boosted_group.get_adjusted_remaining_total_file_count(settings.suppressed_factor)
+        boosted_chance = boosted_adjusted_file_count / (boosted_adjusted_file_count + neutral_adjusted_file_count)
+        is_boosted = random.random() < boosted_chance
+        if is_boosted:
+            print(f"suppressed={self.suppressed_group.remaining_total_file_count}, neutral={self.neutral_group.remaining_total_file_count}, boosted={self.boosted_group.remaining_total_file_count}, selected=boosted")
+            if not self.boosted_group.eligible_files:
+                self.boosted_group.next_iteration()
+            return self.boosted_group.select_file()
         else:
-            selected_file = random.choice(eligible_unbiased_files)
-            self.recent_unbiased_files_queue.append(selected_file)
-            self.unbiased_files_set.add(selected_file)
-        return selected_file
+            print(f"suppressed={self.suppressed_group.remaining_total_file_count}, neutral={self.neutral_group.remaining_total_file_count}, boosted={self.boosted_group.remaining_total_file_count}, selected=neutral")
+            return self.neutral_group.select_file()
+
+
 
     def _get_media_info(self, filepath):
         path = os.path.join(settings.input_base_dir, filepath) 
@@ -604,8 +606,9 @@ class ClipInfoManager:
         return (math.floor(duration_ns / Gst.MSECOND), width, height)
 
     def _get_files(self, enable_filters):
-        unbiased_files = []
-        biased_files = []
+        suppressed_files = []
+        neutral_files = []
+        boosted_files = []
         def get_contain_pattern(csv):
             if not csv:
                 return None
@@ -619,10 +622,17 @@ class ClipInfoManager:
         exclude_contains_pattern = get_contain_pattern(settings.exclude_contains_csv)
         exclude_notstartswith_list = get_startswith_list(settings.exclude_notstartswith_csv)
         exclude_notcontains_pattern = get_contain_pattern(settings.exclude_notcontains_csv)
-        bias_startswith_list = get_startswith_list(settings.bias_startswith_csv)
-        bias_contains_pattern = get_contain_pattern(settings.bias_contains_csv)
-        bias_notstartswith_list = get_startswith_list(settings.bias_notstartswith_csv)
-        bias_notcontains_pattern = get_contain_pattern(settings.bias_notcontains_csv)
+
+        boosted_startswith_list = get_startswith_list(settings.boosted_startswith_csv)
+        boosted_contains_pattern = get_contain_pattern(settings.boosted_contains_csv)
+        boosted_notstartswith_list = get_startswith_list(settings.boosted_notstartswith_csv)
+        boosted_notcontains_pattern = get_contain_pattern(settings.boosted_notcontains_csv)
+
+        suppressed_startswith_list = get_startswith_list(settings.suppressed_startswith_csv)
+        suppressed_contains_pattern = get_contain_pattern(settings.suppressed_contains_csv)
+        suppressed_notstartswith_list = get_startswith_list(settings.suppressed_notstartswith_csv)
+        suppressed_notcontains_pattern = get_contain_pattern(settings.suppressed_notcontains_csv)
+
         stack = [settings.input_base_dir]
         while stack:
             current_dir = stack.pop()
@@ -645,16 +655,79 @@ class ClipInfoManager:
                             continue
                         if exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(lower_path)): 
                             continue
+                    bias=0
                     if (
-                        (bias_startswith_list and any(lower_path.startswith(p) for p in bias_startswith_list))
-                        or (bias_contains_pattern and bool(bias_contains_pattern.search(lower_path)))
-                        or (bias_notstartswith_list and not any(lower_path.startswith(p) for p in bias_notstartswith_list))
-                        or (bias_notcontains_pattern and not bool(bias_notcontains_pattern.search(lower_path)))
+                        (boosted_startswith_list and any(lower_path.startswith(p) for p in boosted_startswith_list))
+                        or (boosted_contains_pattern and bool(boosted_contains_pattern.search(lower_path)))
+                        or (boosted_notstartswith_list and not any(lower_path.startswith(p) for p in boosted_notstartswith_list))
+                        or (boosted_notcontains_pattern and not bool(boosted_notcontains_pattern.search(lower_path)))
                     ):
-                        biased_files.append(path)
+                        bias+=1
+                    if (
+                        (suppressed_startswith_list and any(lower_path.startswith(p) for p in suppressed_startswith_list))
+                        or (suppressed_contains_pattern and bool(suppressed_contains_pattern.search(lower_path)))
+                        or (suppressed_notstartswith_list and not any(lower_path.startswith(p) for p in suppressed_notstartswith_list))
+                        or (suppressed_notcontains_pattern and not bool(suppressed_notcontains_pattern.search(lower_path)))
+                    ):
+                        bias-=1
+                    if bias == -1:
+                        suppressed_files.append(path)
+                    elif bias == 0:
+                        neutral_files.append(path)
                     else:
-                        unbiased_files.append(path)
-        return (unbiased_files, biased_files)
+                        boosted_files.append(path)
+        return (suppressed_files, neutral_files, boosted_files)
+
+class FileGroup():
+    def __init__(self):
+        self.files_set = set()
+        self.recent_files_queue = deque()
+        self.iteration_index = 0
+        self.cleanup()
+
+
+    def setup(self, files, iteration_count):
+        self.files = files
+        self.iteration_count = iteration_count
+        self.iteration_index %= iteration_count
+        recent_exclude_count = min(settings.recent_file_queue_length, math.floor(len(self.files) / 2))
+        recent_set = set(list(self.recent_files_queue)[-recent_exclude_count:]) if recent_exclude_count > 0 else set()
+        self.eligible_files = [f for f in self.files if f not in self.files_set and f not in recent_set]
+        self.remaining_iteration_file_count = sum(1 for f in self.files if f not in self.files_set)
+        if len(self.eligible_files) == 0 and self.remaining_iteration_file_count > 0:
+            print("[WARN] unexpected situation in random filepicker logic") # I don't think this is possible, but hard to definitively prove
+            self.remaining_iteration_file_count = 0
+        self.remaining_iterations = self.iteration_count - 1 - self.iteration_index
+        self.remaining_total_file_count = self.remaining_iteration_file_count + (self.remaining_iterations * len(self.files))
+
+    def cleanup(self):
+        self.files = None
+        self.eligible_files = None
+        self.iteration_count = None
+        self.remaining_iterations = None
+        self.remaining_iteration_file_count = None
+        self.remaining_total_file_count = None
+
+
+    def get_adjusted_remaining_total_file_count(self, factor):
+        adjusted_iteration_count = self.iteration_count / factor
+        if self.iteration_index >= adjusted_iteration_count:
+            return self.remaining_total_file_count
+        adjusted_remaining_iterations = adjusted_iteration_count - 1 - self.iteration_index
+        return self.remaining_iteration_file_count + (adjusted_remaining_iterations * len(self.files))
+
+    def next_iteration(self):
+        self.files_set.clear()
+        self.iteration_index += 1
+        self.iteration_index %= self.iteration_count
+        self.setup(self.files, self.iteration_count)
+
+    def select_file(self):
+        selected_file = random.choice(self.eligible_files)
+        self.recent_files_queue.append(selected_file)
+        self.files_set.add(selected_file)
+        return selected_file
+
 
 class FileBin(Gst.Bin):
     __gsignals__ = {
@@ -665,7 +738,7 @@ class FileBin(Gst.Bin):
     def __init__(self, filepath, seek_ms, width, height):
         super().__init__()
         FileBin._instance_count += 1
-        print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
+        #print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
         location = os.path.join(settings.input_base_dir, filepath)
         self.seek_ms = seek_ms
         self.pad_states = {"video": False, "audio": False}

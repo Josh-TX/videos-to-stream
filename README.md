@@ -19,7 +19,7 @@ There are many adjustable settings that affect the streams behavior. At the mome
 
 For example, this command will make it play each clip for 1.5 seconds, have no crossfades, play 3 clips per file, and will play videos from the "favorites" folder twice as often
 ```
-docker run -p 3000:3000 -e MAX_CLIP_DURATION_S="1.5" -e INTER_TRANSITION_S="0" -e MAX_CLIPS_PER_FILE="3" -e BIAS_STARTSWITH_CSV="favorites/" -v "/path/to/files:/media" joshtxdev/videos-to-stream
+docker run -p 3000:3000 -e MAX_CLIP_DURATION_S="1.5" -e INTER_TRANSITION_S="0" -e MAX_CLIPS_PER_FILE="3" -e BOOSTED_STARTSWITH_CSV="favorites/" -v "/path/to/files:/media" joshtxdev/videos-to-stream
 ```
 
 Here's a complete list of all settings
@@ -44,11 +44,17 @@ EXCLUDE_STARTSWITH_CSV | | string | a comma-separated list of search terms, and 
 EXCLUDE_CONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path contains any of the search terms, it'll be excluded from being played. Sorta like a blacklist 
 EXCLUDE_NOTSTARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT start with any of the search terms, it'll be excluded from being played. Sorta like a whitelist 
 EXCLUDE_NOTCONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT contain any of the search terms, it'll be excluded from being played. Sorta like a whitelist
-BIAS_STARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path starts with any of the search terms, it'll be selected more often (depending on the bias factor)
-BIAS_CONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path contains any of the search terms, it'll be selected more often (depending on the bias factor)
-BIAS_NOTSTARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT start with any of the search terms, it'll be selected more often (depending on the bias factor)
-BIAS_NOTCONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT contain any of the search terms, it'll be selected more often (depending on the bias factor)
-BIAS_FACTOR | 2 | int | A factor for how often biased videos are selected. A bias factor of 2 means that an individual video that's biased is twice as likely to be selected compared to an individual video that's not biased.
+BOOSTED_STARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path starts with any of the search terms, it'll be selected more often (depending on the boosted factor)
+BOOSTED_CONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path contains any of the search terms, it'll be selected more often (depending on the boosted factor)
+BOOSTED_NOTSTARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT start with any of the search terms, it'll be selected more often (depending on the boosted factor)
+BOOSTED_NOTCONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT contain any of the search terms, it'll be selected more often (depending on the boosted factor)
+BOOSTED_FACTOR | 2 | int | A factor for how often boosted videos are selected over non-boosted. A boosted factor of 2 means that an individual video that's boosted is twice as likely to be selected compared to an individual video that's neutral, and 4 times more likely to be selected compared to a video that's suppressed (with suppressed factor of 2).
+SUPPRESSED_STARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path starts with any of the search terms, it'll be selected less often (depending on the suppressed factor)
+SUPPRESSED_CONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path contains any of the search terms, it'll be selected less often (depending on the suppressed factor)
+SUPPRESSED_NOTSTARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT start with any of the search terms, it'll be selected less often (depending on the suppressed factor)
+SUPPRESSED_NOTCONTAINS_CSV | | string | a comma-separated list of search terms, and if a file's full path does NOT contain any of the search terms, it'll be selected less often (depending on the suppressed factor)
+SUPPRESSED_FACTOR | 2 | int | A factor for how often not-suppressed videos are selected over suppressed. A suppressed factor of 2 means that an individual video that's suppressed is half as likely to be selected compared to an individual video that's neutral, and 4 times less likely to be selected compared to a video that's boosted (with boosted factor of 2).
+
 
 Note that a video is either biased or not biased. Having both contains and startswith matching a video doesn't make it doubly-biased or something. 
 
@@ -60,9 +66,7 @@ By default, the stream output has a width of 1280px and a height of 720px, which
 2. black bars
 3. cropping
 
-Stretching is usually not wanted since circles become ovals and so on. By default, this problem is solved with black bars. So a more square shaped video will have vertical bars on the left and right sides. However, there's also an option to use the `X_CROP_PERCENT` and `Y_CROP_PERCENT` variables to solve this problem by cropping. Back to the 4/3 to 16/9 example, the top and bottom would need to each have 12.5% (60px) cut off, leaving the middle 75%. This means that a `Y_CROP_PERCENT` of 25 or higher would allow fully cropping a 4/3 video into a a 16/9 ratio. If the `Y_CROP_PERCENT` was something like 10, then it would crop off 5% of the top, 5% of the bottom, but there still be black barsm just thinner than without cropping. You can set `X_CROP_PERCENT` and `Y_CROP_PERCENT` to both be 100, which just means that you can crop however much is need to create the output aspect ratio. 
-
-
+Stretching is usually not wanted since circles become ovals and so on. By default, this problem is solved with black bars. So a more square shaped video will have vertical bars on the left and right sides. However, there's also an option to use the `X_CROP_PERCENT` and `Y_CROP_PERCENT` variables to solve this problem by cropping. Back to the 4/3 to 16/9 example, the top and bottom would need to each have 12.5% (60px) cut off, leaving the middle 75%. This means that a `Y_CROP_PERCENT` of 25 or higher would allow fully cropping a 4/3 video into a a 16/9 ratio. If the `Y_CROP_PERCENT` was something like 10, then it would crop off 5% of the top, 5% of the bottom, but there still be black bars, just thinner than without cropping. You can set `X_CROP_PERCENT` and `Y_CROP_PERCENT` to both be 100, which just means that you can crop however much is need to create the output aspect ratio. 
 
 # Randomization and Bias
 
@@ -71,8 +75,10 @@ The randomization logic seeks to accomplish the following:
 2. Don't play a recently-played file
 3. Don't follow a predictable pattern
 4. Adapt to changes to the /media directory.
-5. Support a concept of "biased" files that play more often
+5. Allow specifying some files to play more often than others
 
-To accomplish this, each selected file gets added to a set. Only files not in the set can be selected. If all the files are in the set, a "reset" happens wherein the set is cleared. This mostly works, but after a reset a recently-selected file could be selected again. So a queue is also used to prevent recent files from being selected. 
+To accomplish this, each selected file gets added to a set. Only files not in the set can be selected. If all the files are in the set, a "reset" happens wherein the set is cleared. This mostly works, but after a reset a recently-selected file could be selected again. So a queue is also used to prevent recent files from being selected, even after a reset. 
 
-If there are any settings to make files biased, then two sets are used instead of one. A set for unbiased files, and a set for biased files. The goal then is to ensure that the biased-file-set gets reset twice for every one time the unbiased files get reset (when BIAS_FACTOR = 2). If done correctly, each biased file will be played twice, whereas every unbiased file will be played once. It may be hard to explain how this is accomplished, so I'll just give an example. If there are 10 files, and 2 are biased, then we have 8 unbiased files and 2 biased files. To decide whether to take a biased or unbiased file, we have weighted randomization logic that's weighted based on how many files must be played until the next "double-reset". So there's 8 unbiased files to play once, and 2 biased files to play twice, so 8 vs 4. So there's a 2/3rd chance an unbiased file will be chosen, and a 1/3rd chance a biased file will be chosen. 
+If there are any settings to make files boosted and/or suppressed, then three sets are used instead of one. A set for suppressed files, a set for neutral files, and a set for boosted files. The goal then is to select neutral files more often than suppressed files such that the neutral set gets reset twice for each time the suppressed set gets reset once. Likewise, the boosted set should get reset twice for each time the suppressed set gets reset once. To give an example, suppose there are 2 files in each of the 3 bias categories; the 2 suppressed files would each have a weight of 1, the 2 neutral files would each have a weight of 2, and the 2 neutral files would eahc have a weight of 4. This means the sum weight is 1*2 + 2*2 + 4*2 = 14. When selecting the first file, there's a 2/14 chance of selecting a suppressed file, a 4/14 chance of selecting a neutral file, and a 8/14 chance of selecting a boosted file. These probabilities adjust as files are selected, until all 3 sets have done the correct number of resets. These explanations assume the SUPPRESSED_FACTOR and BOOSTED_FACTOR are both 2 (default). Making a factor greater than 2 will make the bias more extreme.
+
+If a file is matched by both boosted settings and suppressed settings, then the file becomes neutral. 
