@@ -31,7 +31,7 @@ if float(os.getenv("CLIP_DURATION_M", "0")) > 0:
 settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "2")) * 1000)
 settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", "0")) * 1000)
 settings.clips_per_file = math.floor(float(os.getenv("CLIPS_PER_FILE", "1")))
-settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "3")) * 1000)
+settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "5")) * 1000)
 settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
 
 settings.width = int(os.getenv("WIDTH", "1280"))
