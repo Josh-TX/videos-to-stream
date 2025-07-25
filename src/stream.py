@@ -6,6 +6,8 @@ import re
 from collections import deque
 from datetime import datetime, timedelta, UTC
 
+from preset_manager import PresetManager
+
 gi.require_version("Gst", "1.0")
 gi.require_version("GLib", "2.0")
 gi.require_version("GstPbutils", "1.0")
@@ -22,17 +24,20 @@ from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 
 Gst.init(None)
 
+preset_manager = PresetManager()
+active_preset = preset_manager.get_active_preset()
+
 class Settings:
     pass
 settings = Settings()
-settings.clip_duration_ms = math.floor(float(os.getenv("CLIP_DURATION_S", "60")) * 1000)
-if float(os.getenv("CLIP_DURATION_M", "0")) > 0:
-    settings.clip_duration_ms = math.floor(float(os.getenv("CLIP_DURATION_M", "0")) * 60 * 1000)
-settings.inter_transition_ms = math.floor(float(os.getenv("INTER_TRANSITION_S", "2")) * 1000)
-settings.intra_transition_ms = math.floor(float(os.getenv("INTRA_TRANSITION_S", "0")) * 1000)
-settings.clips_per_file = math.floor(float(os.getenv("CLIPS_PER_FILE", "1")))
-settings.intra_file_min_gap_ms = math.floor(float(os.getenv("INTRA_FILE_MIN_GAP_S", "5")) * 1000)
-settings.intra_file_max_percent = float(os.getenv("INTRA_FILE_MAX_PERCENT", "80")) / 100
+
+def update_settings():
+    settings.clip_duration_ms = math.floor(float(active_preset.CLIP_DURATION_S) * 1000)
+    settings.inter_transition_ms = math.floor(float(active_preset.INTER_TRANSITION_S) * 1000)
+    settings.intra_transition_ms = math.floor(float(active_preset.INTRA_TRANSITION_S) * 1000)
+    settings.clips_per_file = math.floor(float(active_preset.CLIPS_PER_FILE))
+    settings.intra_file_min_gap_ms = math.floor(float(active_preset.INTRA_FILE_MIN_GAP_S) * 1000)
+    settings.intra_file_max_percent = float(active_preset.INTRA_FILE_MAX_PERCENT) / 100
 
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("HEIGHT", "720"))
@@ -59,6 +64,7 @@ settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
 
 settings.boosted_factor = int(os.getenv("BOOSTED_FACTOR", "2"))
 settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
+
 
 settings.input_base_dir = "/media"
 settings.output_dir = "./serve"
