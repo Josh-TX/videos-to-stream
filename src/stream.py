@@ -21,7 +21,6 @@ from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 # The filebin element internally contains the following: 
 # filesrc -> decodebin -> [decodebin-video-src] -> video_identity -> videoconvert -> videoscale -> capsfilter -> c
 #  [decodebin-audio-src] -> audioconvert -> audioresample -> audio_identity -> am
-
 Gst.init(None)
 
 preset_manager = PresetManager()
@@ -32,12 +31,13 @@ class Settings:
 settings = Settings()
 
 def update_settings():
-    settings.clip_duration_ms = math.floor(float(active_preset.CLIP_DURATION_S) * 1000)
-    settings.inter_transition_ms = math.floor(float(active_preset.INTER_TRANSITION_S) * 1000)
-    settings.intra_transition_ms = math.floor(float(active_preset.INTRA_TRANSITION_S) * 1000)
-    settings.clips_per_file = math.floor(float(active_preset.CLIPS_PER_FILE))
-    settings.intra_file_min_gap_ms = math.floor(float(active_preset.INTRA_FILE_MIN_GAP_S) * 1000)
-    settings.intra_file_max_percent = float(active_preset.INTRA_FILE_MAX_PERCENT) / 100
+    settings.clip_duration_ms = math.floor(float(active_preset["CLIP_DURATION_S"]) * 1000)
+    settings.inter_transition_ms = math.floor(float(active_preset["INTER_TRANSITION_S"]) * 1000)
+    settings.intra_transition_ms = math.floor(float(active_preset["INTRA_TRANSITION_S"]) * 1000)
+    settings.clips_per_file = math.floor(float(active_preset["CLIPS_PER_FILE"]))
+    settings.intra_file_min_gap_ms = math.floor(float(active_preset["INTRA_FILE_MIN_GAP_S"]) * 1000)
+    settings.intra_file_max_percent = float(active_preset["INTRA_FILE_MAX_PERCENT"]) / 100
+update_settings()
 
 settings.width = int(os.getenv("WIDTH", "1280"))
 settings.height = int(os.getenv("HEIGHT", "720"))

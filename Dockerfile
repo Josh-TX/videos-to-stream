@@ -20,4 +20,4 @@ COPY src/*.py /app/
 COPY src/web /serve/
 
 EXPOSE 8000
-CMD ["bash", "-c", "python3 -u app/stream.py & python3 app/serve.py"]
+CMD ["python3", "-u", "app/serve.py"]

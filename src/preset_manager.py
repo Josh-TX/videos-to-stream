@@ -12,9 +12,9 @@ class PresetManager:
         return {
             "name": "default",
             "isActive": True,
-            "CLIP_DURATION_S": os.getenv("CLIP_DURATION_S", "1"),
-            "INTER_TRANSITION_S": os.getenv("INTER_TRANSITION_S", "60"),
-            "INTRA_TRANSITION_S": os.getenv("INTRA_TRANSITION_S", "60"),
+            "CLIP_DURATION_S": os.getenv("CLIP_DURATION_S", "60"),
+            "INTER_TRANSITION_S": os.getenv("INTER_TRANSITION_S", "2"),
+            "INTRA_TRANSITION_S": os.getenv("INTRA_TRANSITION_S", "0"),
             "CLIPS_PER_FILE": os.getenv("CLIPS_PER_FILE", "1"),
             "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "5"),
             "INTRA_FILE_MAX_PERCENT": os.getenv("INTRA_FILE_MAX_PERCENT", "80"),
