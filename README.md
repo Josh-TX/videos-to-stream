@@ -33,7 +33,7 @@ INTRA_TRANSITION_S | 0 | decimal | The duration (in seconds) of the crossfade wh
 CLIPS_PER_FILE | 1 | int | When a file is selected, determines how many clips to play from that file. Clips will be played in chronological order without any overlap. If CLIPS_PER_FILE is too high, then it'll play as many clips as it can given all the constraints (such as clip duration). 
 INTRA_FILE_MIN_GAP_S | 5 | decimal | When there's multiple clips per file, determines the minimum seconds between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file. Be careful with a low value, since seeking is keyframe-based, so the next clip could contain footage you just saw. 
 INTRA_FILE_MAX_PERCENT | 80 | percent | Another way to limit the max clips per file. If a file is 10 minutes long, a value of 80 means that you it can't play more than 8 minutes worth of clips.
-FONT_SIZE | 6 | int | The size of the text in the bottom-left corner that shows the currently-playing file and position. Set it to 0 to hide this text
+FONT_SIZE | 8 | int | The size of the text in the bottom-left corner that shows the currently-playing file and position. Set it to 0 to hide this text
 WIDTH | 1280 | int | The width (in pixels) of the output stream
 HEIGHT | 720 | int | The height (in pixels) of the output stream
 X_CROP_PERCENT | 0 | percent | If the input video's aspect ratio is wider than the output stream's aspect ratio, a postive X_CROP_PERCENT will crop the left and right edges of such videos. 

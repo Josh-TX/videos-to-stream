@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY src/*.py /app/
-COPY src/web /serve/
+COPY vts-remote-dist/ /app/serve/
 
 EXPOSE 8000
-CMD ["python3", "-u", "app/serve.py"]
+WORKDIR /app
+CMD ["python3", "-u", "serve.py"]

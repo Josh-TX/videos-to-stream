@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import atexit
+import signal
 from datetime import datetime, UTC
 from preset_manager import PresetManager
 
@@ -70,6 +71,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, "Expected a JSON array")
                 return
             self.preset_manager.set_presets(presets)
+            signal_stream_presets_changed()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -103,7 +105,7 @@ def start_stream():
         stop_stream()
     
     stream_process = subprocess.Popen([
-        'python3', '-u', 'app/stream.py'
+        'python3', '-u', 'stream.py'
     ])
     print(f"Started stream process with PID: {stream_process.pid}")
 
@@ -123,6 +125,17 @@ def stop_stream():
 def restart_stream():
     print("Restarting stream...")
     start_stream()
+
+def signal_stream_presets_changed():
+    global stream_process
+    if stream_process and stream_process.poll() is None:
+        try:
+            stream_process.send_signal(signal.SIGUSR1)
+            print("Sent presets changed signal to stream process")
+        except Exception as e:
+            print(f"Failed to signal stream process: {e}")
+    else:
+        print("No running stream process to signal")
 
 atexit.register(stop_stream)
 

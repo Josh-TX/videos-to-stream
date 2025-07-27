@@ -18,6 +18,32 @@ class PresetManager:
             "CLIPS_PER_FILE": os.getenv("CLIPS_PER_FILE", "1"),
             "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "5"),
             "INTRA_FILE_MAX_PERCENT": os.getenv("INTRA_FILE_MAX_PERCENT", "80"),
+
+            "FONT_SIZE": os.getenv("FONT_SIZE", "8"),
+            "WIDTH": os.getenv("WIDTH", "1280"),
+            "HEIGHT": os.getenv("HEIGHT", "720"),
+            "X_CROP_PERCENT": os.getenv("X_CROP_PERCENT", "0"),
+            "Y_CROP_PERCENT": os.getenv("Y_CROP_PERCENT", "0"),
+            "PREROLL_S": os.getenv("PREROLL_S", "0.5"),
+            "POSTROLL_S": os.getenv("POSTROLL_S", "0.5"),
+
+            "EXCLUDE_STARTSWITH_CSV": os.getenv("EXCLUDE_STARTSWITH_CSV", ""),
+            "EXCLUDE_CONTAINS_CSV": os.getenv("EXCLUDE_CONTAINS_CSV", ""),
+            "EXCLUDE_NOTSTARTSWITH_CSV": os.getenv("EXCLUDE_NOTSTARTSWITH_CSV", ""),
+            "EXCLUDE_NOTCONTAINS_CSV": os.getenv("EXCLUDE_NOTCONTAINS_CSV", ""),
+            
+            "BOOSTED_STARTSWITH_CSV": os.getenv("BOOSTED_STARTSWITH_CSV", ""),
+            "BOOSTED_CONTAINS_CSV": os.getenv("BOOSTED_CONTAINS_CSV", ""),
+            "BOOSTED_NOTSTARTSWITH_CSV": os.getenv("BOOSTED_NOTSTARTSWITH_CSV", ""),
+            "BOOSTED_NOTCONTAINS_CSV": os.getenv("BOOSTED_NOTCONTAINS_CSV", ""),
+
+            "SUPPRESSED_STARTSWITH_CSV": os.getenv("SUPPRESSED_STARTSWITH_CSV", ""),
+            "SUPPRESSED_CONTAINS_CSV": os.getenv("SUPPRESSED_CONTAINS_CSV", ""),
+            "SUPPRESSED_NOTSTARTSWITH_CSV": os.getenv("SUPPRESSED_NOTSTARTSWITH_CSV", ""),
+            "SUPPRESSED_NOTCONTAINS_CSV": os.getenv("SUPPRESSED_NOTCONTAINS_CSV", ""),
+
+            "BOOSTED_FACTOR": os.getenv("BOOSTED_FACTOR", "2"),
+            "SUPPRESSED_FACTOR": os.getenv("SUPPRESSED_FACTOR", "2"),
         }
 
     def _load_presets(self) -> List[Dict]:
@@ -26,6 +52,7 @@ class PresetManager:
             with open(self.filepath, "r") as f:
                 data = json.load(f)
                 if isinstance(data, list) and data:
+                    print("successfully loaded presets.json")
                     return data
         except (FileNotFoundError, json.JSONDecodeError):
             pass

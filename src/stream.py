@@ -3,6 +3,8 @@ import os
 import random
 import math
 import re
+import signal
+import glob
 from collections import deque
 from datetime import datetime, timedelta, UTC
 
@@ -23,48 +25,44 @@ from gi.repository import Gst, GLib, GObject, GstPbutils, GstController
 #  [decodebin-audio-src] -> audioconvert -> audioresample -> audio_identity -> am
 Gst.init(None)
 
-preset_manager = PresetManager()
-active_preset = preset_manager.get_active_preset()
-
 class Settings:
     pass
 settings = Settings()
 
 def update_settings():
+    preset_manager = PresetManager()
+    active_preset = preset_manager.get_active_preset()
     settings.clip_duration_ms = math.floor(float(active_preset["CLIP_DURATION_S"]) * 1000)
     settings.inter_transition_ms = math.floor(float(active_preset["INTER_TRANSITION_S"]) * 1000)
     settings.intra_transition_ms = math.floor(float(active_preset["INTRA_TRANSITION_S"]) * 1000)
     settings.clips_per_file = math.floor(float(active_preset["CLIPS_PER_FILE"]))
     settings.intra_file_min_gap_ms = math.floor(float(active_preset["INTRA_FILE_MIN_GAP_S"]) * 1000)
     settings.intra_file_max_percent = float(active_preset["INTRA_FILE_MAX_PERCENT"]) / 100
+
+    settings.width = int(active_preset["WIDTH"])
+    settings.height = int(active_preset["HEIGHT"])
+    settings.x_crop_percent = float(active_preset["X_CROP_PERCENT"]) / 100
+    settings.y_crop_percent = float(active_preset["Y_CROP_PERCENT"]) / 100
+    settings.font_size = int(active_preset["FONT_SIZE"])
+    settings.preroll_ms = math.floor(float(active_preset["PREROLL_S"]) * 1000)
+    settings.postroll_ms = math.floor(float(active_preset["POSTROLL_S"]) * 1000)
+
+    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip()
+    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip()
+    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip()
+    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip()
+    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip()
+    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip()
+    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip()
+    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip()
+    settings.boosted_factor = int(active_preset["BOOSTED_FACTOR"])
+    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip()
+    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip()
+    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip()
+    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip()
+    settings.suppressed_factor = int(active_preset["SUPPRESSED_FACTOR"])
+    
 update_settings()
-
-settings.width = int(os.getenv("WIDTH", "1280"))
-settings.height = int(os.getenv("HEIGHT", "720"))
-settings.x_crop_percent = float(os.getenv("X_CROP_PERCENT", "0")) / 100
-settings.y_crop_percent = float(os.getenv("Y_CROP_PERCENT", "0")) / 100
-settings.font_size = int(os.getenv("FONT_SIZE", "6"))
-settings.preroll_ms = math.floor(float(os.getenv("PREROLL_S", "0.5")) * 1000)
-settings.postroll_ms = math.floor(float(os.getenv("POSTROLL_S", "0.5")) * 1000)
-
-settings.exclude_startswith_csv = os.getenv("EXCLUDE_STARTSWITH_CSV", "").strip()
-settings.exclude_contains_csv = os.getenv("EXCLUDE_CONTAINS_CSV", "").strip()
-settings.exclude_notstartswith_csv = os.getenv("EXCLUDE_NOTSTARTSWITH_CSV", "").strip()
-settings.exclude_notcontains_csv = os.getenv("EXCLUDE_NOTCONTAINS_CSV", "").strip()
-settings.boosted_startswith_csv = os.getenv("BOOSTED_STARTSWITH_CSV", "").strip()
-settings.boosted_contains_csv = os.getenv("BOOSTED_CONTAINS_CSV", "").strip()
-settings.boosted_notstartswith_csv = os.getenv("BOOSTED_NOTSTARTSWITH_CSV", "").strip()
-settings.boosted_notcontains_csv = os.getenv("BOOSTED_NOTCONTAINS_CSV", "").strip()
-settings.boosted_factor = int(os.getenv("BOOSTED_FACTOR", "2"))
-settings.suppressed_startswith_csv = os.getenv("SUPPRESSED_STARTSWITH_CSV", "").strip()
-settings.suppressed_contains_csv = os.getenv("SUPPRESSED_CONTAINS_CSV", "").strip()
-settings.suppressed_notstartswith_csv = os.getenv("SUPPRESSED_NOTSTARTSWITH_CSV", "").strip()
-settings.suppressed_notcontains_csv = os.getenv("SUPPRESSED_NOTCONTAINS_CSV", "").strip()
-settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
-
-settings.boosted_factor = int(os.getenv("BOOSTED_FACTOR", "2"))
-settings.suppressed_factor = int(os.getenv("SUPPRESSED_FACTOR", "2"))
-
 
 settings.input_base_dir = "/media"
 settings.output_dir = "./serve"
@@ -74,6 +72,16 @@ settings.auto_pause_s = 60
 settings.last_activity_file = "last-activity.txt"
 settings.last_activity_on_startup_s = 30
 settings.recent_file_queue_length = 30
+
+def handle_presets_changed(signum, frame):
+    print("presets changed")
+    old_width = settings.width
+    old_height = settings.height
+    old_font_size = settings.font_size
+    update_settings()
+    if settings.width != old_width or settings.height != old_height or settings.font_size != old_font_size:
+        manager.technical_changes()
+signal.signal(signal.SIGUSR1, handle_presets_changed)
 
 os.makedirs(settings.input_base_dir, exist_ok=True)
 os.makedirs(settings.output_dir, exist_ok=True)
@@ -88,11 +96,16 @@ class HLSPipelineManager:
         self.clips = []
         self._setup_pipeline()
 
+    def technical_changes(self):
+        print("technical changes to preset")
+        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
+        self.textoverlay.set_property("font-desc", f"Sans, {settings.font_size}")
+
     def _setup_pipeline(self):
         # video elements
         videotestsrc = Gst.ElementFactory.make("videotestsrc", None)
         videoconvert = Gst.ElementFactory.make("videoconvert", None)
-        videocapsfilter = Gst.ElementFactory.make("capsfilter", None)
+        self.videocapsfilter = Gst.ElementFactory.make("capsfilter", None)
         self.compositor = Gst.ElementFactory.make("compositor", None)
         self.textoverlay = Gst.ElementFactory.make("textoverlay", None)
         x264enc = Gst.ElementFactory.make("x264enc", None)
@@ -110,7 +123,7 @@ class HLSPipelineManager:
         hlssink = Gst.ElementFactory.make("hlssink", None)
 
         elements = [
-            videotestsrc, videoconvert, videocapsfilter, self.compositor, self.textoverlay, x264enc, videoqueue,
+            videotestsrc, videoconvert, self.videocapsfilter, self.compositor, self.textoverlay, x264enc, videoqueue,
             audiotestsrc, audioconvert, audioresample, audiocapsfilter, self.audiomixer, faac, audioqueue, 
             mpegtsmux, hlssink
         ]
@@ -122,7 +135,7 @@ class HLSPipelineManager:
         # Properties
         videotestsrc.set_property("is-live", True)
         videotestsrc.set_property("pattern", "ball")
-        videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
+        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
         
         self.textoverlay.set_property("text", self.displayed_text)
         self.textoverlay.set_property("halignment", "left")
@@ -148,11 +161,11 @@ class HLSPipelineManager:
 
         # Link video path
         videotestsrc.link(videoconvert)
-        videoconvert.link(videocapsfilter)
+        videoconvert.link(self.videocapsfilter)
         compositor_pad = self.compositor.request_pad_simple("sink_%u")
         compositor_pad.set_property("alpha", 1)
         compositor_pad.set_property("zorder", 0)
-        videocapsfilter.get_static_pad("src").link(compositor_pad)
+        self.videocapsfilter.get_static_pad("src").link(compositor_pad)
         self.compositor.link(self.textoverlay)
         self.textoverlay.link(x264enc)
         x264enc.link(videoqueue)
@@ -325,7 +338,7 @@ class HLSPipelineManager:
 
             def force_cleanup():
                 if not old_clip.cleanup_scheduled:
-                    print("RESORTING TO FORCE CLEANUP (not good)")
+                    print(f"RESORTING TO FORCE CLEANUP (not good). Filepath = {old_clip.filepath}")
                     #Are the buffers behind? Or maybe we scheduled beyond the file's end?
                     old_clip.cleanup_scheduled = True
                     if not old_clip.audio_finished and audio_probe_id:
@@ -939,6 +952,16 @@ class FileBin(Gst.Bin):
         pipeline = self.get_parent()
         return pipeline.get_clock().get_time() - pipeline.get_base_time()
 
-if __name__ == "__main__":
-    manager = HLSPipelineManager()
-    manager.run()
+
+def delete_stream_files():
+    file_patterns = [os.path.join(settings.output_dir, "*.ts"), os.path.join(settings.output_dir, "*.m3u8")]
+    for pattern in file_patterns:
+        for file_path in glob.glob(pattern):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Error deleting {file_path}: {e}")
+delete_stream_files()
+
+manager = HLSPipelineManager()
+manager.run()
