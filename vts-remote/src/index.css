@@ -105,6 +105,7 @@ a {
 
 .center-container {
     max-width: 800px;
+    width: 100%;
     margin: auto;
 }
 
@@ -126,24 +127,19 @@ p {
 .text-center {
     text-align: center;
 }
-.settings-num-item{
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 4px;
-    align-items: center;
-    margin-bottom: 16px;
-}
-.settings-text-item{
-    display: grid;
-    gap: 4px;
-    align-items: center;
-    margin-bottom: 16px;
-}
+
 input[type=number]{
     max-width: 80px;
+    height: 20px;
 }
 input[type=number]::-webkit-inner-spin-button {
   -webkit-appearance: none;
+}
+input[type=text]{
+    height: 20px;
+}
+.h-28{
+    height: 28px;
 }
 
 video {
@@ -252,20 +248,62 @@ video {
     bottom: 0;
     left: 0; right: 0;
     z-index: 100;
-        height: 32px;
-        border-top: 1px solid var(--border-default);
+    border-top: 1px solid var(--border-default);
     background-color: var(--bg-default);
     box-shadow: 0 -1px 3px rgba(0,0,0,0.4);
 }
 .footer {
-    height: 32px;
+    height: 36px;
     display: grid;
     align-items: center;
-
+    padding: 0 6px;
     grid-template-columns: auto auto auto 1fr auto;
 }
 .preset-selector {
     max-width: 250px;
     min-width: 100px;
     margin-right: 12px;
+}
+
+
+.settings-num-item{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    align-items: center;
+    margin: 4px 0;
+    outline: 1px solid #444;
+}
+.settings-text-item{
+    display: grid;
+    gap: 4px;
+    align-items: center;
+    margin: 4px 0;
+    outline: 1px solid #444;
+}
+
+.expand-label { 
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    padding: 6px 4px;
+}
+
+.expand-label:hover { 
+    cursor: pointer !important;
+    background-color: rgba(0,0,0,0.3)
+}
+
+.collapse-label { 
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px;
+}
+
+.collapse-label:hover { 
+    cursor: pointer !important;
+    background-color: rgba(0,0,0,0.3)
+}
+.setting-desc{
+    padding: 0 4px 4px 2px;
 }

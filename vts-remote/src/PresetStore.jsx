@@ -45,6 +45,10 @@ const usePresetStore = create((set, get) => {
         }
         set({ isDirty: false});
     }
+    const algorithmSettingNames = ["EXCLUDE_STARTSWITH_CSV", "EXCLUDE_CONTAINS_CSV", "EXCLUDE_NOTSTARTSWITH_CSV", "EXCLUDE_NOTCONTAINS_CSV",
+        "BOOSTED_STARTSWITH_CSV", "BOOSTED_CONTAINS_CSV", "BOOSTED_NOTSTARTSWITH_CSV", "BOOSTED_NOTCONTAINS_CSV",
+        "SUPPRESSED_STARTSWITH_CSV", "SUPPRESSED_CONTAINS_CSV", "SUPPRESSED_NOTSTARTSWITH_CSV", "SUPPRESSED_NOTCONTAINS_CSV"
+    ]
 
     return {
         presets: null,
@@ -66,6 +70,20 @@ const usePresetStore = create((set, get) => {
             var updatedPresets = currentPresets.map(preset => ({...preset, isActive: preset.name == presetName}));
             set({ presets: updatedPresets});
             updateIsDirty(updatedPresets);
+        },
+        anyAlgoSettings: () => {
+            var activePreset = get().presets.find(z => z.isActive)
+            return algorithmSettingNames.some(z => activePreset[z])
+        },
+        clearAlgorithmSettings: () => {
+            var presets = [...get().presets];
+            var activeIndex = get().presets.findIndex(z => z.isActive)
+            presets[activeIndex] = { ...presets[activeIndex] }
+            algorithmSettingNames.forEach(settingName => {
+                presets[activeIndex][settingName] = ""
+            });
+            set({ presets: presets});
+            updateIsDirty(presets);
         },
         settingChanged: (settingName, newValue) => {
             var presets = [...get().presets];

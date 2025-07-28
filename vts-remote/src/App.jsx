@@ -14,7 +14,7 @@ const LandingPage = () => {
         <div className="p-4 flex-container">
             <div className='flex-grow'>
                 <h1 className="text-center">VTS Remote</h1>
-                <div className="text-center">HLS stream available at</div>
+                <div className="text-center text-muted">HLS stream available at</div>
                 <h3 className="text-center" style={{ marginTop: "4px" }}>{hlsUrl}</h3>
                 <nav className="space-x-4">
                     <Link to="/live" className="text-blue-600 underline">
@@ -29,7 +29,7 @@ const LandingPage = () => {
             </div>
             <div>
                 <div style={{ maxWidth: "360px", textAlign: "end", margin: "1rem auto" }}>
-                    <small class="text-muted"><a href="https://github.com/Josh-TX/videos-to-stream" style={{ color: "#67b3ff" }}>github</a> | Created by Josh TX </small>
+                    <small className="text-muted"><a href="https://github.com/Josh-TX/videos-to-stream" style={{ color: "#67b3ff" }}>github</a> | Created by Josh TX </small>
                 </div>
             </div>
         </div>

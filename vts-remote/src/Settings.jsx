@@ -28,7 +28,7 @@ const ContextMenu = () => {
 
     return (
         <>
-            <button ref={buttonRef} style={{ position: "relative" }} onClick={() => setIsOpen((prev) => !prev)}>
+            <button className="h-28" ref={buttonRef} style={{ position: "relative" }} onClick={() => setIsOpen((prev) => !prev)}>
                 Manage
                 {isOpen && (
                     <div ref={menuRef} className="context-menu">
@@ -57,21 +57,21 @@ const Footer = () => {
         <option key={preset.name} value={preset.name}>{preset.name}</option>
     ))
 
+    //warn when navigating to an external site
     useEffect(() => {
         const handleBeforeUnload = (e) => {
             if (!isDirty) return;
             e.preventDefault();
-            e.returnValue = ''; // This is required for the browser to show a confirmation
+            e.returnValue = '';
         };
-
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [isDirty]);
+    //warn when navigating internally
     const blocker = useBlocker(
         ({ currentLocation, nextLocation }) =>
             isDirty && currentLocation.pathname !== nextLocation.pathname
     );
-
     useEffect(() => {
         if (blocker.state === "blocked") {
             const shouldProceed = window.confirm(
@@ -86,43 +86,69 @@ const Footer = () => {
             }
         }
     }, [blocker]);
+
+
     return (
         <div className="footer-container">
-            <div className="center-container footer">
-                preset:&nbsp;
-                <select value={getActivePreset().name} onChange={handleChange} className="preset-selector">
-                    {presetOptions}
-                </select>
-                <ContextMenu></ContextMenu>
-                <div></div>
-                <button disabled={!isDirty} onClick={save}>Save</button>
+            <div className="center-container">
+                <div className="footer">
+                    preset:&nbsp;
+                    <select value={getActivePreset().name} onChange={handleChange} className="preset-selector h-28">
+                        {presetOptions}
+                    </select>
+                    <ContextMenu></ContextMenu>
+                    <div></div>
+                    <button className="h-28" disabled={!isDirty} onClick={save}>Save</button>
+                </div>
             </div>
-
         </div>
     )
 }
 
 const SettingItem = ({ name, type = "number", description, preset, settingChanged }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
     const handleChange = (event) => {
         settingChanged(name, event.target.value);
     };
+    const toggleExpand = () => {
+        setIsExpanded(!isExpanded)
+    }
+    if (!isExpanded) {
+        if (type == "number"){
+            return (
+                <div onClick={toggleExpand} className="expand-label">
+                    <span>{name}</span>
+                    <span>{preset[name]}</span>
+                </div>
+            );
+        }
+        const csv = preset[name] ? <div style={{padding: "0 4px 4px 4px", overflow: "hidden", position: "relative", top: "-8px", whiteSpace: "nowrap", textAlign: "right"}}>{preset[name]}</div> : ""
+        return (
+            <div>
+                <div onClick={toggleExpand} className="expand-label">
+                    <span>{name}</span>
+                </div>
+                {csv}
+            </div>
+        );
+    }
     return (
         <div className={type == "number" ? "settings-num-item" : "settings-text-item"}>
-            <label htmlFor={name}>{name}</label>
+            <div className="collapse-label" onClick={toggleExpand}>{name}</div>
             <input
                 id={name}
                 type={type}
                 value={preset[name]}
                 onChange={handleChange}
             />
-            <p className="text-muted colspan-2">{description}</p>
+            <p className="text-muted colspan-2 setting-desc">{description}</p>
         </div>
     );
 };
 
 
 const Settings = () => {
-    const { isLoading, error, settingChanged, getActivePreset } = usePresetStore();
+    const { isLoading, error, settingChanged, getActivePreset, anyAlgoSettings, clearAlgorithmSettings } = usePresetStore();
     if (error) {
         return <div>{error}</div>
     }
@@ -134,8 +160,8 @@ const Settings = () => {
     return (
         <>
             <Logo></Logo>
-            <div className="flex-container center-container" style={{ padding: "0 4px" }}>
-                <div className="flex-grow" style={{ paddingBottom: "36px" }}>
+            <div className="flex-container center-container">
+                <div className="flex-grow" style={{ padding: "0 6px 40px 6px" }}>
                     <h2 style={{ marginTop: "4px" }}>General Settings</h2>
                     <SettingItem
                         name="CLIP_DURATION_S"
@@ -173,8 +199,11 @@ const Settings = () => {
                         settingChanged={settingChanged}
                         description="Another way to limit the max clips per file. If a file is 10 minutes long, a value of 80 means that you it can't play more than 8 minutes worth of clips"
                     />
-                    <hr></hr>
-                    <h2>Algorithm Settings</h2>
+                    <hr style={{ margin: "16px 0 0 0" }}></hr>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <h2>Algorithm Settings</h2>
+                        <div><button onClick={clearAlgorithmSettings} disabled={!anyAlgoSettings()}>clear</button></div>
+                    </div>
                     <SettingItem
                         name="EXCLUDE_STARTSWITH_CSV"
                         preset={preset}
@@ -205,13 +234,6 @@ const Settings = () => {
                     />
 
                     <SettingItem
-                        name="BOOSTED_FACTOR"
-                        preset={preset}
-                        type="number"
-                        settingChanged={settingChanged}
-                        description="A factor for how often boosted videos are selected over non-boosted. A boosted factor of 2 means that an individual video that's boosted is twice as likely to be selected compared to an individual video that's neutral, and 4 times more likely to be selected compared to a video that's suppressed (with suppressed factor of 2)."
-                    />
-                    <SettingItem
                         name="BOOSTED_STARTSWITH_CSV"
                         preset={preset}
                         type="text"
@@ -241,13 +263,6 @@ const Settings = () => {
                     />
 
                     <SettingItem
-                        name="SUPPRESSED_FACTOR"
-                        preset={preset}
-                        type="number"
-                        settingChanged={settingChanged}
-                        description="A factor for how often not-suppressed videos are selected over suppressed. A suppressed factor of 2 means that an individual video that's suppressed is half as likely to be selected compared to an individual video that's neutral, and 4 times less likely to be selected compared to a video that's boosted (with boosted factor of 2)."
-                    />
-                    <SettingItem
                         name="SUPPRESSED_STARTSWITH_CSV"
                         preset={preset}
                         type="text"
@@ -275,7 +290,22 @@ const Settings = () => {
                         settingChanged={settingChanged}
                         description="	a comma-separated list of search terms, and if a file's full path does NOT contain any of the search terms, it'll be selected less often (depending on the suppressed factor)"
                     />
-                    <hr></hr>
+
+                    <SettingItem
+                        name="BOOSTED_FACTOR"
+                        preset={preset}
+                        type="number"
+                        settingChanged={settingChanged}
+                        description="A factor for how often boosted videos are selected over non-boosted. A boosted factor of 2 means that an individual video that's boosted is twice as likely to be selected compared to an individual video that's neutral, and 4 times more likely to be selected compared to a video that's suppressed (with suppressed factor of 2)."
+                    />
+                    <SettingItem
+                        name="SUPPRESSED_FACTOR"
+                        preset={preset}
+                        type="number"
+                        settingChanged={settingChanged}
+                        description="A factor for how often not-suppressed videos are selected over suppressed. A suppressed factor of 2 means that an individual video that's suppressed is half as likely to be selected compared to an individual video that's neutral, and 4 times less likely to be selected compared to a video that's boosted (with boosted factor of 2)."
+                    />
+                    <hr style={{ margin: "16px 0 0 0" }}></hr>
                     <h2>Technical Settings</h2>
                     <SettingItem
                         name="FONT_SIZE"
