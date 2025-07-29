@@ -1,6 +1,7 @@
 import { createHashRouter, RouterProvider, Link, Navigate } from 'react-router-dom';
 import StreamPlayer from "./StreamPlayer"
 import Settings from "./Settings"
+import FileBrowser from './FileBrowser';
 
 const LandingPage = () => {
     var url = window.location.href;
@@ -23,6 +24,9 @@ const LandingPage = () => {
                     <Link to="/settings" className="text-blue-600 underline">
                         <button className="main-button">Settings & Presets</button>
                     </Link>
+                    <Link to="/files" className="text-blue-600 underline">
+                        <button className="main-button">Browse Files</button>
+                    </Link>
                     <button className="main-button" onClick={handleRestart}>Restart Stream</button>
 
                 </nav>
@@ -43,6 +47,7 @@ function App() {
         { path: "/", element: <LandingPage /> },
         { path: "/live", element: <StreamPlayer /> },
         { path: "/settings", element: <Settings /> },
+        { path: "/files", element: <FileBrowser /> },
         { path: "*", element: <Navigate to="/" replace /> }
     ]);
     return (

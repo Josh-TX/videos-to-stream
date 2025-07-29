@@ -463,7 +463,7 @@ class ClipInfoManager:
     def __init__(self):
         self.clipinfo_queue = deque()
         self.discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
-        self.video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm'}
+        self.video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', 'mpeg'}
         self.suppressed_group = FileGroup()
         self.neutral_group = FileGroup()
         self.boosted_group = FileGroup()
@@ -665,15 +665,13 @@ class ClipInfoManager:
                         continue
                     path = os.path.relpath(entry.path, start=settings.input_base_dir)
                     lower_path = path.lower()
-                    if enable_filters:
-                        if exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list):
-                            continue
-                        if exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)): 
-                            continue
-                        if exclude_notstartswith_list and not any(lower_path.startswith(p) for p in exclude_notstartswith_list):
-                            continue
-                        if exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(lower_path)): 
-                            continue
+                    if enable_filters and (
+                        (exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list))
+                        or (exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)))
+                        or (exclude_notstartswith_list and not any(lower_path.startswith(p) for p in exclude_notstartswith_list))
+                        or (exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(lower_path)))
+                    ):
+                        continue
                     bias=0
                     if (
                         (boosted_startswith_list and any(lower_path.startswith(p) for p in boosted_startswith_list))

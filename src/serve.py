@@ -2,6 +2,7 @@ import http.server
 import socketserver
 import functools
 import json
+import re
 import os
 import subprocess
 import atexit
@@ -34,6 +35,9 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/presets":
             self.handle_get_presets()
+            return
+        if self.path == "/files":
+            self.handle_get_files()
             return
         if self.path.endswith(".m3u8"):
             self.update_last_activity()
@@ -81,6 +85,14 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, f"Failed to save presets: {e}")
 
+    def handle_get_files(self):
+        active_preset = self.preset_manager.get_active_preset()
+        suppressed_files, neutral_files, boosted_files, excluded_files = get_files(active_preset)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps([suppressed_files, neutral_files, boosted_files, excluded_files]).encode("utf-8"))
+
     def handle_restart(self):
         try:
             restart_stream()
@@ -98,6 +110,102 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 f.write(now.isoformat())
         except Exception as e:
             print(f"Error writing last activity file: {e}")
+
+def get_files(active_preset):
+    # this is largely copy-pasted from stream.py. 
+    # first recreate stream.py's settings object
+    class Settings:
+        pass
+    settings = Settings()
+    settings.input_base_dir = "/media"
+    video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', 'mpeg'}
+    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip()
+    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip()
+    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip()
+    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip()
+    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip()
+    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip()
+    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip()
+    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip()
+    settings.boosted_factor = int(active_preset["BOOSTED_FACTOR"])
+    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip()
+    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip()
+    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip()
+    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip()
+    settings.suppressed_factor = int(active_preset["SUPPRESSED_FACTOR"])
+
+    # now the only difference is that we're also tracking excluded_files
+    excluded_files = []
+    suppressed_files = []
+    neutral_files = []
+    boosted_files = []
+    def get_contain_pattern(csv):
+        if not csv:
+            return None
+        lower_terms = [term.strip().lower() for term in csv.split(",") if term.strip()]
+        return re.compile("|".join(re.escape(term) for term in lower_terms))
+    def get_startswith_list(csv):
+        if not csv:
+            return None
+        return [term.strip().lstrip("/").lower() for term in csv.split(",") if term.strip()]
+    exclude_startswith_list = get_startswith_list(settings.exclude_startswith_csv)
+    exclude_contains_pattern = get_contain_pattern(settings.exclude_contains_csv)
+    exclude_notstartswith_list = get_startswith_list(settings.exclude_notstartswith_csv)
+    exclude_notcontains_pattern = get_contain_pattern(settings.exclude_notcontains_csv)
+
+    boosted_startswith_list = get_startswith_list(settings.boosted_startswith_csv)
+    boosted_contains_pattern = get_contain_pattern(settings.boosted_contains_csv)
+    boosted_notstartswith_list = get_startswith_list(settings.boosted_notstartswith_csv)
+    boosted_notcontains_pattern = get_contain_pattern(settings.boosted_notcontains_csv)
+
+    suppressed_startswith_list = get_startswith_list(settings.suppressed_startswith_csv)
+    suppressed_contains_pattern = get_contain_pattern(settings.suppressed_contains_csv)
+    suppressed_notstartswith_list = get_startswith_list(settings.suppressed_notstartswith_csv)
+    suppressed_notcontains_pattern = get_contain_pattern(settings.suppressed_notcontains_csv)
+
+    stack = [settings.input_base_dir]
+    while stack:
+        current_dir = stack.pop()
+        with os.scandir(current_dir) as it:
+            for entry in it:
+                if entry.is_dir():
+                    stack.append(entry.path)
+                elif not entry.is_file():
+                    continue 
+                if not os.path.splitext(entry.name)[1].lower() in video_extensions:
+                    continue
+                path = os.path.relpath(entry.path, start=settings.input_base_dir)
+                lower_path = path.lower()
+                if (
+                    (exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list))
+                    or (exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)))
+                    or (exclude_notstartswith_list and not any(lower_path.startswith(p) for p in exclude_notstartswith_list))
+                    or (exclude_notcontains_pattern and not bool(exclude_notcontains_pattern.search(lower_path)))
+                ):
+                    excluded_files.append(path)
+                    continue
+                bias=0
+                if (
+                    (boosted_startswith_list and any(lower_path.startswith(p) for p in boosted_startswith_list))
+                    or (boosted_contains_pattern and bool(boosted_contains_pattern.search(lower_path)))
+                    or (boosted_notstartswith_list and not any(lower_path.startswith(p) for p in boosted_notstartswith_list))
+                    or (boosted_notcontains_pattern and not bool(boosted_notcontains_pattern.search(lower_path)))
+                ):
+                    bias+=1
+                if (
+                    (suppressed_startswith_list and any(lower_path.startswith(p) for p in suppressed_startswith_list))
+                    or (suppressed_contains_pattern and bool(suppressed_contains_pattern.search(lower_path)))
+                    or (suppressed_notstartswith_list and not any(lower_path.startswith(p) for p in suppressed_notstartswith_list))
+                    or (suppressed_notcontains_pattern and not bool(suppressed_notcontains_pattern.search(lower_path)))
+                ):
+                    bias-=1
+                if bias == -1:
+                    suppressed_files.append(path)
+                elif bias == 0:
+                    neutral_files.append(path)
+                else:
+                    boosted_files.append(path)
+    return (suppressed_files, neutral_files, boosted_files, excluded_files)
 
 def start_stream():
     global stream_process
