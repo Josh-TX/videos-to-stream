@@ -9,7 +9,7 @@ const FileBrowser = () => {
     const [showExcluded, setShowExcluded] = useState(true);
     const { getActivePreset } = usePresetStore();
     useEffect(() => {
-        const baseUrl = "http://localhost:3000"
+        const baseUrl = ""
         fetch(baseUrl + '/files')
             .then(res => res.json())
             .then(setFiless);
