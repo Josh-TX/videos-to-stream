@@ -5,7 +5,7 @@ from typing import List, Dict
 
 class PresetManager:
     def __init__(self):
-        self.filepath = "presets.json"
+        self.filepath = "/metadata/presets.json"
         self.presets: List[Dict] = self._load_presets()
 
     def _get_default_preset(self) -> Dict:

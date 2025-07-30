@@ -8,6 +8,8 @@ docker run -p 3000:3000 -v "/path/to/files:/media" joshtxdev/videos-to-stream
 
 This will serve an HLS stream at `/playlist.m3u8`. It also serves a simple webpage at `/` that plays the stream. The stream will recursively scan the container's /media folder for all video files, randomly select a file, and play a random 1-minute video clip from the file. It then crossfades into the next randomly-selected file, and so on.
 
+You can also mount to the containers /metadata folder to preserve presets beyond the lifetime of the container
+
 # Configuration
 
 There are many adjustable settings that affect the streams behavior. At the moment these settings can be controlled via environmental variables. Some useful settings include

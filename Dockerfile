@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-libav \
     gir1.2-gstreamer-1.0 \
     gir1.2-gst-plugins-base-1.0 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/* && mkdir /metadata
 
 COPY src/*.py /app/
 COPY vts-remote-dist/ /app/serve/
