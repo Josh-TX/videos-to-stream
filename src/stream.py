@@ -5,6 +5,7 @@ import math
 import re
 import signal
 import glob
+from fractions import Fraction
 from collections import deque
 from datetime import datetime, timedelta, UTC
 
@@ -29,6 +30,10 @@ class Settings:
     pass
 settings = Settings()
 
+def decimal_to_fraction_string(decimal_value: float, max_denominator: int = 1001) -> str:
+    fraction = Fraction(decimal_value).limit_denominator(max_denominator)
+    return f"{fraction.numerator}/{fraction.denominator}"
+
 def update_settings():
     preset_manager = PresetManager()
     active_preset = preset_manager.get_active_preset()
@@ -41,6 +46,7 @@ def update_settings():
 
     settings.width = int(active_preset["WIDTH"])
     settings.height = int(active_preset["HEIGHT"])
+    settings.frame_rate_str = decimal_to_fraction_string(float(active_preset["FRAME_RATE"]))
     settings.x_crop_percent = float(active_preset["X_CROP_PERCENT"]) / 100
     settings.y_crop_percent = float(active_preset["Y_CROP_PERCENT"]) / 100
     settings.font_size = int(active_preset["FONT_SIZE"])
@@ -72,15 +78,22 @@ settings.auto_pause_s = 60
 settings.last_activity_file = "last-activity.txt"
 settings.last_activity_on_startup_s = 30
 settings.recent_file_queue_length = 30
+settings.settings_change_msg = False
+
 
 def handle_presets_changed(signum, frame):
     print("presets changed")
     old_width = settings.width
     old_height = settings.height
     old_font_size = settings.font_size
+    old_frame_rate_str = settings.frame_rate_str
     update_settings()
-    if settings.width != old_width or settings.height != old_height or settings.font_size != old_font_size:
+    if settings.width != old_width or settings.height != old_height or settings.font_size != old_font_size or settings.frame_rate_str != old_frame_rate_str:
         manager.technical_changes()
+    settings.settings_change_msg = True
+    def msg_done():
+        settings.settings_change_msg = False
+    GLib.timeout_add(2000, msg_done)
 signal.signal(signal.SIGUSR1, handle_presets_changed)
 
 os.makedirs(settings.input_base_dir, exist_ok=True)
@@ -98,7 +111,7 @@ class HLSPipelineManager:
 
     def technical_changes(self):
         print("technical changes to preset")
-        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
+        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, framerate={settings.frame_rate_str}, pixel-aspect-ratio=1/1"))
         self.textoverlay.set_property("font-desc", f"Sans, {settings.font_size}")
 
     def _setup_pipeline(self):
@@ -135,7 +148,7 @@ class HLSPipelineManager:
         # Properties
         videotestsrc.set_property("is-live", True)
         videotestsrc.set_property("pattern", "ball")
-        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, pixel-aspect-ratio=1/1"))
+        self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, framerate={settings.frame_rate_str}, pixel-aspect-ratio=1/1"))
         
         self.textoverlay.set_property("text", self.displayed_text)
         self.textoverlay.set_property("halignment", "left")
@@ -398,6 +411,9 @@ class HLSPipelineManager:
             return Gst.PadProbeReturn.OK
         buf = info.get_buffer()
         if not buf:
+            return Gst.PadProbeReturn.OK
+        if settings.settings_change_msg:
+            self.textoverlay.set_property("text", " settings changed!")
             return Gst.PadProbeReturn.OK
         active_clip = max(
             (c for c in self.clips if buf.pts >= c.fadein_t + int(0.5 * c.fadein_ms * Gst.MSECOND)),

@@ -326,6 +326,12 @@ const Settings = () => {
                         description="The width (in pixels) of the output stream"
                     />
                     <SettingItem
+                        name="FRAME_RATE"
+                        preset={preset}
+                        settingChanged={settingChanged}
+                        description="The frames-per-second of the output stream"
+                    />
+                    <SettingItem
                         name="X_CROP_PERCENT"
                         preset={preset}
                         settingChanged={settingChanged}

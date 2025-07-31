@@ -22,6 +22,7 @@ class PresetManager:
             "FONT_SIZE": os.getenv("FONT_SIZE", "8"),
             "WIDTH": os.getenv("WIDTH", "1280"),
             "HEIGHT": os.getenv("HEIGHT", "720"),
+            "FRAME_RATE": os.getenv("FRAME_RATE", "30"),
             "X_CROP_PERCENT": os.getenv("X_CROP_PERCENT", "0"),
             "Y_CROP_PERCENT": os.getenv("Y_CROP_PERCENT", "0"),
             "PREROLL_S": os.getenv("PREROLL_S", "0.5"),
@@ -48,15 +49,56 @@ class PresetManager:
 
     def _load_presets(self) -> List[Dict]:
         """Attempt to load presets from file. Fallback to default if file is missing or invalid."""
+        if not os.path.exists(self.filepath):
+            return [self._get_default_preset()]
         try:
             with open(self.filepath, "r") as f:
                 data = json.load(f)
-                if isinstance(data, list) and data:
-                    print("successfully loaded presets.json")
-                    return data
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
-        return [self._get_default_preset()]
+                
+                # Check if data is a list
+                if not isinstance(data, list):
+                    print("presets.json is not a list, using default preset")
+                    return [self._get_default_preset()]
+                
+                # Check if list is empty
+                if not data:
+                    print("presets.json is empty, using default preset")
+                    return [self._get_default_preset()]
+                
+                # Get all required keys from default preset
+                default_preset = self._get_default_preset()
+                required_keys = set(default_preset.keys())
+                
+                # Validate and fix each preset in the list
+                valid_presets = []
+                for i, preset in enumerate(data):
+                    if not isinstance(preset, dict):
+                        print(f"Preset {i} is not a dictionary, skipping")
+                        continue
+                    
+                    # Check if all required keys are present and add missing ones
+                    preset_keys = set(preset.keys())
+                    if not required_keys.issubset(preset_keys):
+                        missing_keys = required_keys - preset_keys
+                        print(f"Preset {i} missing keys: {missing_keys}, filling with defaults")
+                        
+                        # Add missing keys from default preset
+                        for key in missing_keys:
+                            preset[key] = default_preset[key]
+                    
+                    valid_presets.append(preset)
+                
+                # If no valid presets found, use default
+                if not valid_presets:
+                    print("No valid presets found in presets.json, using default preset")
+                    return [self._get_default_preset()]
+                
+                print(f"Successfully loaded {len(valid_presets)} valid presets from presets.json")
+                return valid_presets
+                
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading presets.json: {e}, using default preset")
+            return [self._get_default_preset()]
 
     def refresh_presets(self):
         """Reload presets from the file (e.g., if it was externally modified)."""
