@@ -11,9 +11,9 @@ const usePresetStore = create((set, get) => {
                 presets[0].isActive = true;
             }
             originalPresets = presets;
-            set({ presets, isLoading: false });
+            set({ presets, isLoading: false, errorGet: null });
         } catch (error) {
-            set({ error: error.message });
+            set({ errorGet: error.message });
         }
     };
 
@@ -27,7 +27,10 @@ const usePresetStore = create((set, get) => {
                 body: JSON.stringify(get().presets),
             });
         } catch (error) {
-            set({ error: error.message, isDirty: true });
+            set({ errorSave: error.message, isDirty: true });
+            setTimeout(() => {
+                 set({ errorSave: null});
+            }, 4000)
         }
     }
     const updateIsDirty = (updatedPresets) => {
@@ -54,7 +57,8 @@ const usePresetStore = create((set, get) => {
         presets: null,
         isLoading: true,
         isDirty: false,
-        error: null,
+        errorGet: null,
+        errorSave: null,
         save: () => saveToServer(),
         revert: () => {
             set({ presets: originalPresets});

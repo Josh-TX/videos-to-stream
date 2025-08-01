@@ -46,7 +46,7 @@ const ContextMenu = () => {
 };
 
 const Footer = () => {
-    const { presets, getActivePreset, setActivePreset, isDirty, save, revert } = usePresetStore();
+    const { presets, getActivePreset, setActivePreset, isDirty, save, revert, errorSave } = usePresetStore();
     if (!presets) {
         return <div></div>
     }
@@ -86,10 +86,19 @@ const Footer = () => {
             }
         }
     }, [blocker]);
-
+    var errorToast = null;
+    if (errorSave) {
+        errorToast = (
+            <div style={{ position: "fixed", bottom: "36px", left: 0, right: 0 }}>
+                <div style={{ margin: "0 auto", maxWidth: "90vw", width: "400px", background: "#910808", color: "white", padding: "16px" }}>
+                    {errorSave}
+                </div>
+            </div>)
+    }
 
     return (
         <div className="footer-container">
+            {errorToast}
             <div className="center-container">
                 <div className="footer">
                     preset:&nbsp;
@@ -114,7 +123,7 @@ const SettingItem = ({ name, type = "number", description, preset, settingChange
         setIsExpanded(!isExpanded)
     }
     if (!isExpanded) {
-        if (type == "number"){
+        if (type == "number") {
             return (
                 <div onClick={toggleExpand} className="expand-label">
                     <span>{name}</span>
@@ -122,7 +131,7 @@ const SettingItem = ({ name, type = "number", description, preset, settingChange
                 </div>
             );
         }
-        const csv = preset[name] ? <div style={{padding: "0 4px 4px 4px", overflow: "hidden", position: "relative", top: "-8px", whiteSpace: "nowrap", textAlign: "right"}}>{preset[name]}</div> : ""
+        const csv = preset[name] ? <div style={{ padding: "0 4px 4px 4px", overflow: "hidden", position: "relative", top: "-8px", whiteSpace: "nowrap", textAlign: "right" }}>{preset[name]}</div> : ""
         return (
             <div>
                 <div onClick={toggleExpand} className="expand-label">
@@ -148,9 +157,9 @@ const SettingItem = ({ name, type = "number", description, preset, settingChange
 
 
 const Settings = () => {
-    const { isLoading, error, settingChanged, getActivePreset, anyAlgoSettings, clearAlgorithmSettings } = usePresetStore();
-    if (error) {
-        return <div>{error}</div>
+    const { isLoading, errorGet, settingChanged, getActivePreset, anyAlgoSettings, clearAlgorithmSettings } = usePresetStore();
+    if (errorGet) {
+        return <div>{errorGet}</div>
     }
     if (isLoading) {
         return <div>loading</div>
