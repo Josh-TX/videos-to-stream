@@ -65,6 +65,16 @@ const usePresetStore = create((set, get) => {
             updateIsDirty(originalPresets);
         },
         getActivePreset: () => get().presets.find(z => z.isActive),
+        getActiveAlgoPreset: () => {
+            var activePreset = get().presets.find(z => z.isActive);
+            var res = {};
+            algorithmSettingNames.forEach(key => {
+                if (activePreset[key]){
+                    res[key]=activePreset[key];
+                }
+            });
+            return res;
+        },
         setActivePreset: (presetName) => {
             var currentPresets = get().presets;
             if (!currentPresets.some(z => z.name == presetName)){

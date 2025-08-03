@@ -310,10 +310,11 @@ video {
 
 .icon{
     display: inline-block;
-    width: 20px;
-    min-width: 20px;
+    width: 18px;
+    min-width: 18px;
     text-align: center;
-    margin: -4px 0
+    margin: -4px 0;
+    user-select: none;
 }
 .icon.red {
     color: rgb(255, 45, 45);
@@ -323,4 +324,7 @@ video {
 }
 .icon.yellow {
     color: yellow;
+}
+.file-path {
+    line-height: 0.95em;
 }

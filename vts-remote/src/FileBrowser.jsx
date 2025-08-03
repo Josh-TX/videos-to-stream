@@ -4,10 +4,32 @@ import usePresetStore from "./PresetStore.jsx"
 import { useBlocker } from 'react-router-dom';
 import Logo from "./Logo.jsx";
 
+const RelevantSettings = ({ settings }) => {
+  const keys = Object.keys(settings || {});
+
+  if (keys.length === 0) {
+    return <p className="text-muted">Preset has no algorithm settings</p>;
+  }
+
+  return (
+    <>
+        <p className="text-muted">Algorithm Settings:</p>
+        <ul style={{marginTop: "0"}}>
+        {keys.map((key) => (
+            <li key={key} style={{marginTop: "4px"}}>
+                <small className="text-muted">{key}</small>: {String(settings[key])}
+            </li>
+        ))}
+        </ul>
+    </>
+  );
+};
+
+
 const FileBrowser = () => {
     const [filess, setFiless] = useState(null);
     const [showExcluded, setShowExcluded] = useState(true);
-    const { getActivePreset } = usePresetStore();
+    const { getActivePreset, getActiveAlgoPreset } = usePresetStore();
     useEffect(() => {
         const baseUrl = ""
         fetch(baseUrl + '/files')
@@ -30,6 +52,7 @@ const FileBrowser = () => {
     files.sort((a, b) => a.path.localeCompare(b.path));
 
     const preset = getActivePreset();
+    const presetAlgo = getActiveAlgoPreset();
     const bFactor = parseFloat(preset.BOOSTED_FACTOR)
     const sFactor = parseFloat(preset.SUPPRESSED_FACTOR)
     const sumWeight = suppressed.length + (neutral.length * sFactor) + (boosted.length * sFactor * bFactor);
@@ -42,15 +65,23 @@ const FileBrowser = () => {
             case 'e':
             return <span className="icon red">✕</span>;
             default:
-                return <span className="icon"></span>;
+                return <span className="icon text-muted">-</span>;
         }
     };
+    const roundChance = (odds) => {
+        if (odds < 4){
+            return Math.round(odds * 10) / 10
+        } else {
+            return Math.round(odds);
+        }
+    }
 
     return (
         <>
             <Logo></Logo>
-            <div className="center-container" style={{marginTop: 0, paddingBottom: "8px"}}>
-                <p>Current Preset: {preset.name}</p>
+            <div className="center-container" style={{marginTop: 0, padding: "0 4px 8px 4px"}}>
+                <p style={{marginBottom: "4px"}}><span className="text-muted">Current Preset:</span> {preset.name}</p>
+                <RelevantSettings settings={presetAlgo}></RelevantSettings>
                 <h2>Summary</h2>
                 <table style={{width: "100%", textAlign: "left",  marginBottom: "16px"}}>
                     <thead>
@@ -59,6 +90,7 @@ const FileBrowser = () => {
                             <th>category</th>
                             <th>file count</th>
                             <th>each file's chance</th>
+                            <th>sum category %</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -66,27 +98,30 @@ const FileBrowser = () => {
                             <td><span className="icon green">↑</span></td>
                             <td>boosted</td>
                             <td>{boosted.length}</td>
-                            <td>1 in {Math.round(sumWeight / (bFactor * sFactor))}</td>
+                            <td>1 in {roundChance(sumWeight / (bFactor * sFactor))}</td>
+                            <td>{Math.round(boosted.length * bFactor * sFactor / sumWeight * 1000) / 10}%</td>
                         </tr>
                         <tr>
-                            <td><span className="icon"></span></td>
+                            <td><span className="icon text-muted">-</span></td>
                             <td>neutral</td>
                             <td>{neutral.length}</td>
-                            <td>1 in {Math.round(sumWeight / sFactor)}</td>
+                            <td>1 in {roundChance(sumWeight / sFactor)}</td>
+                            <td>{Math.round(neutral.length * sFactor / sumWeight * 1000) / 10}%</td>
                         </tr>
                         <tr>
                             <td><span className="icon yellow">↓</span></td>
                             <td>suppressed</td>
                             <td>{suppressed.length}</td>
                             <td>1 in {sumWeight}</td>
+                            <td>{Math.round(suppressed.length / sumWeight * 1000) / 10}%</td>
                         </tr>
                         <tr>
                             <td><span className="icon red">✕</span></td>
                             <td>excluded</td>
                             <td>{excluded.length}</td>
                             <td>none</td>
+                            <td>0%</td>
                         </tr>
-
                     </tbody>
                 </table>
                 <h2 style={{ marginTop: "20px", marginBottom: "8px" }}>File List</h2>
@@ -102,9 +137,9 @@ const FileBrowser = () => {
                     </label>
                 </div>
                 {files.map((file) => (
-                    <div key={file.path} style={{display: "flex", alignItems: "center", margin: "8px 0"}}>
+                    <div key={file.path} style={{display: "flex", alignItems: "center", margin: "10px 0"}}>
                         {getFileIcon(file.cat)}
-                        <span>
+                        <span className="file-path">
                             {file.path}
                         </span>
                     </div>

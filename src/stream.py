@@ -5,6 +5,7 @@ import math
 import re
 import signal
 import glob
+from pathlib import Path
 from fractions import Fraction
 from collections import deque
 from datetime import datetime, timedelta, UTC
@@ -625,7 +626,7 @@ class ClipInfoManager:
 
     def _get_media_info(self, filepath):
         path = os.path.join(settings.input_base_dir, filepath) 
-        uri = f"file://{path}"
+        uri = Path(path).as_uri()
         info = self.discoverer.discover_uri(uri)
         duration_ns = info.get_duration()
 
