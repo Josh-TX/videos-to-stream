@@ -16,7 +16,7 @@ class PresetManager:
             "INTER_TRANSITION_S": os.getenv("INTER_TRANSITION_S", "2"),
             "INTRA_TRANSITION_S": os.getenv("INTRA_TRANSITION_S", "0"),
             "CLIPS_PER_FILE": os.getenv("CLIPS_PER_FILE", "1"),
-            "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "5"),
+            "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "8"),
             "INTRA_FILE_MAX_PERCENT": os.getenv("INTRA_FILE_MAX_PERCENT", "80"),
 
             "FONT_SIZE": os.getenv("FONT_SIZE", "8"),

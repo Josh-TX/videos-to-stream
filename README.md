@@ -8,7 +8,7 @@ docker run -p 3000:3000 -v "/path/to/files:/media" joshtxdev/videos-to-stream
 
 This will serve an HLS stream at `/playlist.m3u8`. The stream will recursively scan the container's /media folder for all video files, randomly select a file, and play a random 1-minute video clip from the file. It then crossfades into the next randomly-selected file, and repeats this forever. To reduce hardware strain, the stream will auto-pause after 60 seconds of no network activity, and it auto-resumes once there is. 
 
-There's also soure code for a Roku TV App. More detailed instructions below
+There's also source code for a Roku TV App. [See more info below](#randomization-and-bias)
 
 ## VTS Remote 
 
@@ -42,7 +42,7 @@ CLIP_DURATION_S | 60 | decimal | The duration (in seconds) of each clip, not inc
 INTER_TRANSITION_S | 2 | decimal | The duration (in seconds) of the crossfade when transitioning from one file to another file
 CLIPS_PER_FILE | 1 | int | When a file is selected, determines how many clips to play from that file. Clips will be played in chronological order without any overlap. If CLIPS_PER_FILE is too high, then it'll play as many clips as it can given all the constraints (such as clip duration). 
 INTRA_TRANSITION_S | 0 | decimal | The duration (in seconds) of the crossfade when transitioning from one clip to the next clip within the same file
-INTRA_FILE_MIN_GAP_S | 5 | decimal | When there's multiple clips per file, determines the minimum seconds between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file. Be careful with a low value, since seeking is keyframe-based, so the next clip could contain footage you just saw. 
+INTRA_FILE_MIN_GAP_S | 8 | decimal | When there's multiple clips per file, determines the minimum seconds between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file. A value below 8 can risk seeing the same footage twice, since seeking is keyframe-based. 
 INTRA_FILE_MAX_PERCENT | 80 | percent | Another way to limit the max clips per file. If a file is 10 minutes long, a value of 80 means that you it can't play more than 8 minutes worth of clips.
 BASE_DIRECTORY | | string | If specified, will use /media/{BASE_DIRECTORY} as the base directory instead of just /media. This is similar to EXCLUDE_NOTSTARTSWITH_CSV, but is case-sensitive, affects other settings that use STARTSWITH, and affects the bottom-left info text
 EXCLUDE_STARTSWITH_CSV | | string | a comma-separated list of search terms, and if a file's full path starts with any of the search terms, it'll be excluded from being played. Sorta like a blacklist 
@@ -67,7 +67,7 @@ Y_CROP_PERCENT | 0 | percent | If the input video's aspect ratio is taller than 
 PREROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the beginning of a clip prior to changing the clip's volume and alpha. 
 POSTROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the end after changing the clip's volume and alpha
 
-## Roku TV App
+## Roku TV player
 
 On a Roku TV, there's not an official App designed to play an HLS stream. The best official way I've found is by manually constructing a m3u8 file that references the stream's URL, putting it on a USB stick, plugging it into the TV, and using the Roku Media Player App.
 
@@ -89,10 +89,10 @@ For example, if you have a video file with a 1/1 aspect ratio, and the stream ou
 
 ## Randomization and Bias
 
-The randomization logic is more akin to a playlist shuffle rather than true randomness. If there's no boosted/suppressed files, it plays every file once in a random order, and repeats this (different order each time). 
+The randomization logic is more akin to a playlist shuffle rather than true randomness. Under normal circumstances (no boosted/suppressed files), it plays every file once in a random order, and repeats this (different order each time). 
 
-There are many settings that can classify files as being "boosted" or "suppressed". This can result in up to 3 groups of files (boosted, suppressed, & neutral). Each group basically has it's own playlist shuffling logic, and the stream will disproportionally choose files from the more boosted group. In fact, for each playthrough of all suppressed files, it'll play all neutral files twice, and all boosted files 4 times. The `BOOSTED_FACTOR` or `SUPPRESSED_FACTOR` settings can make the relative ratios even more extreme.
+There are many settings that can classify each file as being "boosted" or "suppressed". This can result in up to 3 groups of files: boosted, suppressed, and neutral. Each group basically has it's own playlist shuffling logic, and the stream will disproportionally choose files from the more boosted group. In fact, for each single playthrough of all suppressed files, it'll play all neutral files twice, and all boosted files 4 times. The `BOOSTED_FACTOR` or `SUPPRESSED_FACTOR` settings can make the relative ratios even more extreme.
 
-In VTS Remote website, there's a page to browse files, and it shows the all files for the selected preset along with the file's boosted/suppressed status.
+In VTS Remote, there's a page to browse files, and it shows the boosted/suppressed status of each file. 
 
 If a file is both boosted and suppressed, it becomes neutral. 
