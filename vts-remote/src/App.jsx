@@ -2,6 +2,7 @@ import { createHashRouter, RouterProvider, Link, Navigate } from 'react-router-d
 import StreamPlayer from "./StreamPlayer"
 import Settings from "./Settings"
 import FileBrowser from './FileBrowser';
+import logoUrl from './assets/logo.png';
 
 const LandingPage = () => {
     var url = window.location.href;
@@ -14,7 +15,7 @@ const LandingPage = () => {
     return (
         <div className="p-4 flex-container">
             <div className='flex-grow'>
-                <h1 className="text-center">VTS Remote</h1>
+                <h1 className="text-center" style={{fontSize: "40px"}}><img src={logoUrl} height="30"></img> Remote</h1>
                 <div className="text-center text-muted">HLS stream available at</div>
                 <h3 className="text-center" style={{ marginTop: "4px" }}>{hlsUrl}</h3>
                 <nav className="space-x-4">
@@ -33,7 +34,7 @@ const LandingPage = () => {
             </div>
             <div>
                 <div style={{ maxWidth: "360px", textAlign: "end", margin: "1rem auto" }}>
-                    <small className="text-muted"><a href="https://github.com/Josh-TX/videos-to-stream" style={{ color: "#67b3ff" }}>github</a> | Created by Josh TX </small>
+                    <small className="text-muted"><a href="https://github.com/Josh-TX/videos-to-stream" style={{ color: "#002c6e" }}>github</a> | Created by Josh TX </small>
                 </div>
             </div>
         </div>

@@ -77,72 +77,79 @@ const FileBrowser = () => {
 
     return (
         <>
-            <Logo></Logo>
-            <div className="center-container" style={{marginTop: 0, padding: "0 4px 8px 4px"}}>
-                <p style={{marginBottom: "4px"}}><span className="text-muted">Current Preset:</span> {preset.name}</p>
-                <RelevantSettings settings={presetAlgo}></RelevantSettings>
-                <h2>Summary</h2>
-                <table style={{width: "100%", textAlign: "left",  marginBottom: "16px"}}>
-                    <thead>
-                        <tr>
-                            <th>icon</th>
-                            <th>category</th>
-                            <th>file count</th>
-                            <th>each file's chance</th>
-                            <th>sum category %</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><span className="icon green">↑</span></td>
-                            <td>boosted</td>
-                            <td>{boosted.length}</td>
-                            <td>1 in {roundChance(sumWeight / (bFactor * sFactor))}</td>
-                            <td>{Math.round(boosted.length * bFactor * sFactor / sumWeight * 1000) / 10}%</td>
-                        </tr>
-                        <tr>
-                            <td><span className="icon text-muted">-</span></td>
-                            <td>neutral</td>
-                            <td>{neutral.length}</td>
-                            <td>1 in {roundChance(sumWeight / sFactor)}</td>
-                            <td>{Math.round(neutral.length * sFactor / sumWeight * 1000) / 10}%</td>
-                        </tr>
-                        <tr>
-                            <td><span className="icon yellow">↓</span></td>
-                            <td>suppressed</td>
-                            <td>{suppressed.length}</td>
-                            <td>1 in {sumWeight}</td>
-                            <td>{Math.round(suppressed.length / sumWeight * 1000) / 10}%</td>
-                        </tr>
-                        <tr>
-                            <td><span className="icon red">✕</span></td>
-                            <td>excluded</td>
-                            <td>{excluded.length}</td>
-                            <td>none</td>
-                            <td>0%</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <h2 style={{ marginTop: "20px", marginBottom: "8px" }}>File List</h2>
-                <div style={{display: "flex", justifyContent: "space-between", marginBottom: "12px"}} className="text-muted">
-                    <span>showing {files.length} of {fileCount}</span>
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={showExcluded}
-                            onChange={e => setShowExcluded(e.target.checked)}
-                        />
-                        Show Excluded Files
-                    </label>
+            <div className="center-container" style={{marginTop: 0}}>
+                <Logo></Logo>
+                <div className="panel" style={{marginTop: "8px"}}>
+                    <p style={{marginBottom: "4px"}}><span className="text-muted">Current Preset:</span> {preset.name}</p>
+                    <RelevantSettings settings={presetAlgo}></RelevantSettings>
                 </div>
-                {files.map((file) => (
-                    <div key={file.path} style={{display: "flex", alignItems: "center", margin: "10px 0"}}>
-                        {getFileIcon(file.cat)}
-                        <span className="file-path">
-                            {file.path}
-                        </span>
+
+                <div className="panel" style={{marginTop: "16px"}}>
+                    <h2 style={{marginTop: 0}}>Summary</h2>
+                    <table style={{width: "100%", textAlign: "left",  marginBottom: "16px"}}>
+                        <thead>
+                            <tr>
+                                <th>icon</th>
+                                <th>category</th>
+                                <th>file count</th>
+                                <th>each file's chance</th>
+                                <th>sum category %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span className="icon green">↑</span></td>
+                                <td>boosted</td>
+                                <td>{boosted.length}</td>
+                                <td>1 in {roundChance(sumWeight / (bFactor * sFactor))}</td>
+                                <td>{Math.round(boosted.length * bFactor * sFactor / sumWeight * 1000) / 10}%</td>
+                            </tr>
+                            <tr>
+                                <td><span className="icon text-muted">-</span></td>
+                                <td>neutral</td>
+                                <td>{neutral.length}</td>
+                                <td>1 in {roundChance(sumWeight / sFactor)}</td>
+                                <td>{Math.round(neutral.length * sFactor / sumWeight * 1000) / 10}%</td>
+                            </tr>
+                            <tr>
+                                <td><span className="icon yellow">↓</span></td>
+                                <td>suppressed</td>
+                                <td>{suppressed.length}</td>
+                                <td>1 in {sumWeight}</td>
+                                <td>{Math.round(suppressed.length / sumWeight * 1000) / 10}%</td>
+                            </tr>
+                            <tr>
+                                <td><span className="icon red">✕</span></td>
+                                <td>excluded</td>
+                                <td>{excluded.length}</td>
+                                <td>none</td>
+                                <td>0%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div className="panel" style={{marginTop: "16px", marginBottom: "12px"}}>
+                    <h2 style={{ marginTop: "0", marginBottom: "8px" }}>File List</h2>
+                    <div style={{display: "flex", justifyContent: "space-between", marginBottom: "12px"}} className="text-muted">
+                        <span>showing {files.length} of {fileCount}</span>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={showExcluded}
+                                onChange={e => setShowExcluded(e.target.checked)}
+                            />
+                            Show Excluded Files
+                        </label>
                     </div>
-                ))}
+                    {files.map((file) => (
+                        <div key={file.path} style={{display: "flex", alignItems: "center", margin: "10px 0"}}>
+                            {getFileIcon(file.cat)}
+                            <span className="file-path">
+                                {file.path}
+                            </span>
+                        </div>
+                    ))}
+                </div>
             </div>
         </>
     );

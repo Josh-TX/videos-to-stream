@@ -81,7 +81,7 @@ settings.last_activity_file = "last-activity.txt"
 settings.last_activity_on_startup_s = 30
 settings.recent_file_queue_length = 30
 settings.settings_change_msg = False
-
+settings.error_message = ""
 
 def handle_presets_changed(signum, frame):
     print("presets changed")
@@ -285,6 +285,10 @@ class HLSPipelineManager:
         interp_mode = GstController.InterpolationMode.LINEAR if transition_ns > 1 else GstController.InterpolationMode.NONE
         now = self.get_time()
         ns_till_swap = new_clip.fadein_t - now
+        if ns_till_swap < 0:
+            print(f"[WARN] ns_till_swap was negative")
+            ns_till_swap = 10 & Gst.MSECOND
+
 
         new_filebin_video_pad = new_clip.filebin.get_static_pad("video_src") 
         new_compositor_pad = new_filebin_video_pad.get_peer()
@@ -417,11 +421,14 @@ class HLSPipelineManager:
         if settings.settings_change_msg:
             self.textoverlay.set_property("text", " settings changed!")
             return Gst.PadProbeReturn.OK
+        if settings.error_message:
+            self.textoverlay.set_property("text", settings.error_message)
+            return Gst.PadProbeReturn.OK
         active_clip = max(
             (c for c in self.clips if buf.pts >= c.fadein_t + int(0.5 * c.fadein_ms * Gst.MSECOND)),
             key=lambda c: c.fadein_t,
             default=None)
-        if not active_clip:
+        if not active_clip or not active_clip.filebin or not active_clip.fadein_t:
             return Gst.PadProbeReturn.OK
         time_ns = buf.pts - active_clip.fadein_t + active_clip.filebin.segment_start_ns + settings.preroll_ms * Gst.MSECOND
         seconds = time_ns // Gst.SECOND
@@ -505,7 +512,9 @@ class ClipInfoManager:
         self.boosted_group.cleanup()
 
         if not filepath:
-            raise FileNotFoundError(self._get_error_message())
+            settings.error_message = self._get_error_message()
+            raise FileNotFoundError(f"[ERROR] no video file to play. {settings.error_message}")
+        settings.error_message = ""
         file_duration_ms, width, height = self._get_media_info(filepath)
         duration_w_inter_transitions = settings.clip_duration_ms + (settings.inter_transition_ms * 2)
 
@@ -557,11 +566,17 @@ class ClipInfoManager:
 
     def _get_error_message(self):
         if not os.listdir(settings.input_root_dir):
-            return "[ERROR] no video file to play. The /media directory is empty"
+            return f"The {settings.input_root_dir} directory is empty"
+        if settings.base_directory:
+            full_base_path = os.path.join(settings.input_root_dir, settings.base_directory)
+            if not os.path.isdir(full_base_path): 
+                return f"{full_base_path} is not a directory"
+            if not os.listdir(full_base_path):
+                return f"The {full_base_path} directory is empty"
         suppressed_files, neutral_files, boosted_files = self._get_files(False) # get files but with no exclusion filters
         if suppressed_files or neutral_files or boosted_files:
-            return "[ERROR] no video file to play. The EXCLUDE settings filtered out all video files"
-        return "[ERROR] no video file to play. The /media directory contains no video files"
+            return "The EXCLUDE settings filtered out all video files"
+        return f"The {settings.input_root_dir} directory contains no video files"
 
     def _next_file(self):
         suppressed_files, neutral_files, boosted_files = self._get_files(True)
@@ -674,7 +689,12 @@ class ClipInfoManager:
         suppressed_notstartswith_list = get_startswith_list(settings.suppressed_notstartswith_csv)
         suppressed_notcontains_pattern = get_contain_pattern(settings.suppressed_notcontains_csv)
 
-        stack = [os.path.join(settings.input_root_dir, settings.base_directory)]
+        stack = [settings.input_root_dir]
+        if settings.base_directory:
+            current_dir = os.path.join(settings.input_root_dir, settings.base_directory)
+            if not os.path.isdir(current_dir):
+                return (suppressed_files, neutral_files, boosted_files)
+            stack = [current_dir]
         while stack:
             current_dir = stack.pop()
             with os.scandir(current_dir) as it:
@@ -978,14 +998,16 @@ class FileBin(Gst.Bin):
 
 
 def delete_stream_files():
-    file_patterns = [os.path.join(settings.output_dir, "*.ts"), os.path.join(settings.output_dir, "*.m3u8")]
-    for pattern in file_patterns:
-        for file_path in glob.glob(pattern):
+    keep_pattern = re.compile(r"segment0000\d\.ts$") #because of the delay, we must avoid deleting the new .ts files
+    for file_path in glob.glob(os.path.join(settings.output_dir, "*.ts")):
+        filename = os.path.basename(file_path)
+        if not keep_pattern.match(filename):
             try:
                 os.remove(file_path)
             except Exception as e:
                 print(f"Error deleting {file_path}: {e}")
-delete_stream_files()
+# some players don't like having missing .ts files. So to handle a restart better, we delay deleting the .ts files
+GLib.timeout_add(20000, delete_stream_files)
 
 manager = HLSPipelineManager()
 manager.run()

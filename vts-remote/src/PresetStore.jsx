@@ -20,14 +20,21 @@ const usePresetStore = create((set, get) => {
     fetchData();
     const saveToServer = async () => {
         try {
-            set({ isDirty: false });
+            newPresets = get().presets
+            set({ isDirty: false, saveBtn: "Saving" });
             await fetch(baseUrl + '/presets', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(get().presets),
+                body: JSON.stringify(newPresets),
             });
+            set({ saveBtn: "Saved!" });
+            originalPresets = newPresets
+            setTimeout(() => {
+                set({ saveBtn: "Save" });
+            }, 1000)
+            window.dispatchEvent(new CustomEvent('collapse-all-settings'));
         } catch (error) {
-            set({ errorSave: error.message, isDirty: true });
+            set({ errorSave: error.message, isDirty: true, saveBtn: "Save" });
             setTimeout(() => {
                  set({ errorSave: null});
             }, 4000)
@@ -56,6 +63,7 @@ const usePresetStore = create((set, get) => {
     return {
         presets: null,
         isLoading: true,
+        saveBtn: "Save",
         isDirty: false,
         errorGet: null,
         errorSave: null,
@@ -84,6 +92,7 @@ const usePresetStore = create((set, get) => {
             var updatedPresets = currentPresets.map(preset => ({...preset, isActive: preset.name == presetName}));
             set({ presets: updatedPresets});
             updateIsDirty(updatedPresets);
+            window.dispatchEvent(new CustomEvent('collapse-all-settings'));
         },
         anyAlgoSettings: () => {
             var activePreset = get().presets.find(z => z.isActive)
@@ -136,6 +145,7 @@ const usePresetStore = create((set, get) => {
             updatedPresets[0] = {...updatedPresets[0], isActive: true}
             set({ presets: updatedPresets});
             updateIsDirty(updatedPresets);
+            window.dispatchEvent(new CustomEvent('collapse-all-settings'));
         },
         duplicateActivePreset: () => {
             var currentPresets = get().presets;
@@ -151,6 +161,7 @@ const usePresetStore = create((set, get) => {
             var updatedPresets = [...currentPresets.map(z => ({...z, isActive: false})), {...activePreset, name: newName}]
             set({ presets: updatedPresets});
             updateIsDirty(updatedPresets);
+            window.dispatchEvent(new CustomEvent('collapse-all-settings'));
         }
     };
 });

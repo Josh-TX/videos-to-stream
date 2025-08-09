@@ -2,10 +2,11 @@
     color-scheme: light dark;
 
     --text-default: #FFF;
-    --text-muted: #ccc;
+    --text-muted: #DDD;
     --text-very-muted: #888;
     --text-primary: #3498db;
-    --bg-default: #2d2d35;
+    --bg-default: #1c6dbf;
+    --bg-dark: #0c355e;
     --border-default: #444;
     --text-link: #4AB3F4;
     --border-filedrop: #41a0ff;
@@ -220,6 +221,13 @@ video {
     }
 }
 
+.panel{
+    background-color: var(--bg-dark);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.3);
+}
+
 .main-button {
   display: block;
   width: 90%;
@@ -229,7 +237,7 @@ video {
   font-size: 1.25rem;
   font-weight: 600;
   color: #ffffff;
-  background-color: #1a1a1a;
+  background-color: var(--bg-dark);
   border: none;
   border-radius: 0; /* Sharp corners */
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3); /* Subtle shadow */
@@ -239,7 +247,6 @@ video {
 }
 
 .main-button:hover {
-  background-color: #222;
   cursor: pointer;
 }
 
@@ -248,8 +255,7 @@ video {
     bottom: 0;
     left: 0; right: 0;
     z-index: 100;
-    border-top: 1px solid var(--border-default);
-    background-color: var(--bg-default);
+    background-color: var(--bg-dark);
     box-shadow: 0 -1px 3px rgba(0,0,0,0.4);
 }
 .footer {
@@ -272,14 +278,14 @@ video {
     gap: 4px;
     align-items: center;
     margin: 4px 0;
-    outline: 1px solid #444;
+    outline: 1px solid var(--bg-default);
 }
 .settings-text-item{
     display: grid;
     gap: 4px;
     align-items: center;
     margin: 4px 0;
-    outline: 1px solid #444;
+    outline: 1px solid var(--bg-default);
 }
 
 .expand-label { 
@@ -289,7 +295,7 @@ video {
     padding: 6px 4px;
 }
 
-.expand-label:hover { 
+.clickable-label:hover { 
     cursor: pointer !important;
     background-color: rgba(0,0,0,0.3)
 }
