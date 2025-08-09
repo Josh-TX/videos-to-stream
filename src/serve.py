@@ -117,21 +117,22 @@ def get_files(active_preset):
     class Settings:
         pass
     settings = Settings()
-    settings.input_base_dir = "/media"
+    settings.input_root_dir = "/media"
     video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', 'mpeg'}
-    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip()
-    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip()
-    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip()
-    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip()
-    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip()
-    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip()
-    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip()
-    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip()
+    settings.base_directory = active_preset["BASE_DIRECTORY"].strip(" \t\n\r/\\")
+    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip(" \t\n\r")
+    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip(" \t\n\r")
     settings.boosted_factor = int(active_preset["BOOSTED_FACTOR"])
-    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip()
-    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip()
-    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip()
-    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip()
+    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip(" \t\n\r")
     settings.suppressed_factor = int(active_preset["SUPPRESSED_FACTOR"])
 
     # now the only difference is that we're also tracking excluded_files
@@ -163,7 +164,7 @@ def get_files(active_preset):
     suppressed_notstartswith_list = get_startswith_list(settings.suppressed_notstartswith_csv)
     suppressed_notcontains_pattern = get_contain_pattern(settings.suppressed_notcontains_csv)
 
-    stack = [settings.input_base_dir]
+    stack = [os.path.join(settings.input_root_dir, settings.base_directory)]
     while stack:
         current_dir = stack.pop()
         with os.scandir(current_dir) as it:
@@ -174,8 +175,11 @@ def get_files(active_preset):
                     continue 
                 if not os.path.splitext(entry.name)[1].lower() in video_extensions:
                     continue
-                path = os.path.relpath(entry.path, start=settings.input_base_dir)
-                lower_path = path.lower()
+                path = os.path.relpath(entry.path, start=settings.input_root_dir)
+                if settings.base_directory:
+                    lower_path = path[len(settings.base_directory) + 1:].lower()
+                else:
+                    lower_path = path.lower()
                 if (
                     (exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list))
                     or (exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)))

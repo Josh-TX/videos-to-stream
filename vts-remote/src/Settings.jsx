@@ -214,6 +214,13 @@ const Settings = () => {
                         <div><button onClick={clearAlgorithmSettings} disabled={!anyAlgoSettings()}>clear</button></div>
                     </div>
                     <SettingItem
+                        name="BASE_DIRECTORY"
+                        preset={preset}
+                        type="text"
+                        settingChanged={settingChanged}
+                        description="If specified, will use /media/{BASE_DIRECTORY} as the base directory instead of just /media. This is similar to EXCLUDE_NOTSTARTSWITH_CSV, but this will affect other settings that use STARTSWITH, and it'll affect the bottom-left info text"
+                    />
+                    <SettingItem
                         name="EXCLUDE_STARTSWITH_CSV"
                         preset={preset}
                         type="text"

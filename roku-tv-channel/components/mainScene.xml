@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+  
+  <children>
+    <!-- Video Player Node -->
+    <Video
+      id="videoPlayer"
+      width="1920"
+      height="1080"
+      translation="[0, 0]"
+      visible="true"
+    />
+    <Label
+      id="sourceLabel"
+      text=""
+      width="1920"
+      height="540"
+      translation="[0, 540]"
+      horizAlign="center"
+      vertAlign="center"
+      color="0xFFFFFFFF"
+      font="font:MediumBoldSystemFont"
+      visible="true"
+      wrap="true"
+    />
+    <!-- Error Text (initially hidden) -->
+    <Label
+      id="errorLabel"
+      text="Failed to load stream"
+      width="400"
+      height="100"
+      translation="[760, 490]"
+      horizAlign="center"
+      vertAlign="center"
+      color="0xFF0000FF"
+      font="font:MediumBoldSystemFont"
+      visible="false"
+    />
+  </children>
+</component>

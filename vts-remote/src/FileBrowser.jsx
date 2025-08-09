@@ -1,7 +1,6 @@
 
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import usePresetStore from "./PresetStore.jsx"
-import { useBlocker } from 'react-router-dom';
 import Logo from "./Logo.jsx";
 
 const RelevantSettings = ({ settings }) => {
@@ -13,7 +12,7 @@ const RelevantSettings = ({ settings }) => {
 
   return (
     <>
-        <p className="text-muted">Algorithm Settings:</p>
+        <p>Algorithm Settings:</p>
         <ul style={{marginTop: "0"}}>
         {keys.map((key) => (
             <li key={key} style={{marginTop: "4px"}}>

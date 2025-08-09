@@ -54,24 +54,25 @@ def update_settings():
     settings.preroll_ms = math.floor(float(active_preset["PREROLL_S"]) * 1000)
     settings.postroll_ms = math.floor(float(active_preset["POSTROLL_S"]) * 1000)
 
-    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip()
-    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip()
-    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip()
-    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip()
-    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip()
-    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip()
-    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip()
-    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip()
+    settings.base_directory = active_preset["BASE_DIRECTORY"].strip(" \t\n\r/\\")
+    settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.exclude_notstartswith_csv = active_preset["EXCLUDE_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.exclude_notcontains_csv = active_preset["EXCLUDE_NOTCONTAINS_CSV"].strip(" \t\n\r")
+    settings.boosted_startswith_csv = active_preset["BOOSTED_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.boosted_contains_csv = active_preset["BOOSTED_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.boosted_notstartswith_csv = active_preset["BOOSTED_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.boosted_notcontains_csv = active_preset["BOOSTED_NOTCONTAINS_CSV"].strip(" \t\n\r")
     settings.boosted_factor = int(active_preset["BOOSTED_FACTOR"])
-    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip()
-    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip()
-    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip()
-    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip()
+    settings.suppressed_startswith_csv = active_preset["SUPPRESSED_STARTSWITH_CSV"].strip(" \t\n\r")
+    settings.suppressed_contains_csv = active_preset["SUPPRESSED_CONTAINS_CSV"].strip(" \t\n\r")
+    settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
+    settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip(" \t\n\r")
     settings.suppressed_factor = int(active_preset["SUPPRESSED_FACTOR"])
     
 update_settings()
 
-settings.input_base_dir = "/media"
+settings.input_root_dir = "/media"
 settings.output_dir = "./serve"
 settings.bin_creation_ms = 1000
 settings.audio_controller_fix = True
@@ -97,7 +98,7 @@ def handle_presets_changed(signum, frame):
     GLib.timeout_add(2000, msg_done)
 signal.signal(signal.SIGUSR1, handle_presets_changed)
 
-os.makedirs(settings.input_base_dir, exist_ok=True)
+os.makedirs(settings.input_root_dir, exist_ok=True)
 os.makedirs(settings.output_dir, exist_ok=True)
 
 class HLSPipelineManager:
@@ -430,7 +431,11 @@ class HLSPipelineManager:
             time_str = f"{hours:02}:{minutes % 60:02}:{seconds % 60:02}"
         else:
             time_str = f"{minutes:02}:{seconds % 60:02}"
-        new_display_text = f" {time_str}   {os.path.splitext(active_clip.filepath)[0]}"
+        filepath = active_clip.filepath
+        # filepath does not include the input_root_dir, it should usually start with the base_directory (unless base_directory was just changed)
+        if settings.base_directory and filepath.startswith(settings.base_directory + os.sep):
+            filepath = filepath[len(settings.base_directory) + 1:]
+        new_display_text = f" {time_str}   {os.path.splitext(filepath)[0]}"
         if self.displayed_text != new_display_text:
             self.displayed_text = new_display_text
             self.textoverlay.set_property("text", self.displayed_text)
@@ -551,7 +556,7 @@ class ClipInfoManager:
         return clipinfos
 
     def _get_error_message(self):
-        if not os.listdir(settings.input_base_dir):
+        if not os.listdir(settings.input_root_dir):
             return "[ERROR] no video file to play. The /media directory is empty"
         suppressed_files, neutral_files, boosted_files = self._get_files(False) # get files but with no exclusion filters
         if suppressed_files or neutral_files or boosted_files:
@@ -625,7 +630,7 @@ class ClipInfoManager:
 
 
     def _get_media_info(self, filepath):
-        path = os.path.join(settings.input_base_dir, filepath) 
+        path = os.path.join(settings.input_root_dir, filepath) 
         uri = Path(path).as_uri()
         info = self.discoverer.discover_uri(uri)
         duration_ns = info.get_duration()
@@ -669,7 +674,7 @@ class ClipInfoManager:
         suppressed_notstartswith_list = get_startswith_list(settings.suppressed_notstartswith_csv)
         suppressed_notcontains_pattern = get_contain_pattern(settings.suppressed_notcontains_csv)
 
-        stack = [settings.input_base_dir]
+        stack = [os.path.join(settings.input_root_dir, settings.base_directory)]
         while stack:
             current_dir = stack.pop()
             with os.scandir(current_dir) as it:
@@ -680,8 +685,12 @@ class ClipInfoManager:
                         continue 
                     if not os.path.splitext(entry.name)[1].lower() in self.video_extensions:
                         continue
-                    path = os.path.relpath(entry.path, start=settings.input_base_dir)
-                    lower_path = path.lower()
+                    path = os.path.relpath(entry.path, start=settings.input_root_dir)
+                    if settings.base_directory:
+                        lower_path = path[len(settings.base_directory) + 1:].lower()
+                    else:
+                        lower_path = path.lower()
+                    
                     if enable_filters and (
                         (exclude_startswith_list and any(lower_path.startswith(p) for p in exclude_startswith_list))
                         or (exclude_contains_pattern and bool(exclude_contains_pattern.search(lower_path)))
@@ -773,7 +782,7 @@ class FileBin(Gst.Bin):
         super().__init__()
         FileBin._instance_count += 1
         #print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
-        location = os.path.join(settings.input_base_dir, filepath)
+        location = os.path.join(settings.input_root_dir, filepath)
         self.seek_ms = seek_ms
         self.pad_states = {"video": False, "audio": False}
         self.video_block_probe_id = None

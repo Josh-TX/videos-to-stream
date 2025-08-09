@@ -28,6 +28,8 @@ class PresetManager:
             "PREROLL_S": os.getenv("PREROLL_S", "0.5"),
             "POSTROLL_S": os.getenv("POSTROLL_S", "0.5"),
 
+            "BASE_DIRECTORY": os.getenv("BASE_DIRECTORY", ""),
+
             "EXCLUDE_STARTSWITH_CSV": os.getenv("EXCLUDE_STARTSWITH_CSV", ""),
             "EXCLUDE_CONTAINS_CSV": os.getenv("EXCLUDE_CONTAINS_CSV", ""),
             "EXCLUDE_NOTSTARTSWITH_CSV": os.getenv("EXCLUDE_NOTSTARTSWITH_CSV", ""),

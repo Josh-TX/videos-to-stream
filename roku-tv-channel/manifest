@@ -1,0 +1,31 @@
+title=Videos to Stream
+subtitle=A livestream sourced from your videos
+major_version=1
+minor_version=0
+build_version=0
+
+###  Main Entry Point for the Application
+main_function=Main
+
+###  Application Details
+version=1.0.0
+channel_id=dev
+app_version=1.0.0
+
+###  Resolution Support
+ui_resolutions=fhd
+supports_input_launch=1
+
+###  BrightScript Entry Points
+bs_const=DEBUG=false
+
+###  Required Channel Store Assets
+mm_icon_focus_fhd=pkg:/images/icon_focus.png
+mm_icon_focus_hd=pkg:/images/icon_focus.png
+
+###  Splash Screen Assets (optional)
+splash_screen_hd=pkg:/images/splash_screen.png
+splash_screen_sd=pkg:/images/splash_screen.png
+
+###  Required Permissions
+supports_input_launch=1
