@@ -20,7 +20,7 @@ const usePresetStore = create((set, get) => {
     fetchData();
     const saveToServer = async () => {
         try {
-            newPresets = get().presets
+            var newPresets = get().presets
             set({ isDirty: false, saveBtn: "Saving" });
             await fetch(baseUrl + '/presets', {
                 method: 'PUT',
