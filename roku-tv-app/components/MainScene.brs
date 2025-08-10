@@ -41,7 +41,6 @@ end sub
 sub onVideoError()
     errorMsg = m.video.errorMsg
     print "MainScene: Video error: " + errorMsg
-    m.loadingLabel.visible = false
     m.errorLabel.visible = true
     m.errorLabel.text = "Error: " + errorMsg
 end sub

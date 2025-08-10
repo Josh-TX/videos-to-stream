@@ -8,7 +8,7 @@ docker run -p 3000:3000 -v "/path/to/files:/media" joshtxdev/videos-to-stream
 
 This will serve an HLS stream at `/playlist.m3u8`. The stream will recursively scan the container's /media folder for all video files, randomly select a file, and play a random 1-minute video clip from the file. It then crossfades into the next randomly-selected file, and repeats this forever. To reduce hardware strain, the stream will auto-pause after 60 seconds of no network activity, and it auto-resumes once there is. 
 
-There's also source code for a Roku TV App. [See more info below](#randomization-and-bias)
+There's also source code for a basic Roku TV App. [See more info below](#playing-on-roku-tv)
 
 ## VTS Remote 
 
@@ -67,16 +67,16 @@ Y_CROP_PERCENT | 0 | percent | If the input video's aspect ratio is taller than 
 PREROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the beginning of a clip prior to changing the clip's volume and alpha. 
 POSTROLL_S | 0.5 | decimal | The amount of time (in seconds) to play the video in the background at the end after changing the clip's volume and alpha
 
-## Roku TV player
+## Playing on a Roku TV
 
 On a Roku TV, there's not an official App designed to play an HLS stream. The best official way I've found is by manually constructing a m3u8 file that references the stream's URL, putting it on a USB stick, plugging it into the TV, and using the Roku Media Player App.
 
-However, you can sideload a a very basic custom App. Here's the steps to do so:
-1. Clone this repository
-2. Edit the file `/roku-tv-app/components/MainScene.brs` to have the correct `hlsUrl`
-3. Make a zip file consisting of all the contents of the `/roku-tv-app` directory
+However, you can instead sideload a custom App using these steps:
+1. Clone/Download this repository
+2. Edit the file `<repo>/roku-tv-app/components/MainScene.brs` to have the correct `hlsUrl`
+3. Make a zip file consisting of all the contents of the `<repo>/roku-tv-app` directory
 4. On your Roku TV remote, enable developer mode by pressing home three times, up twice, and then right, left, right, left, right.
-5. It should prompt for a passcode and restart. Your TV will now host a webpage at it's current ipv4 address. Open this webpage, and login with username=rokudev, and the passcode you entered
+5. It should prompt for a passcode and then restart. Your TV will now host a webpage at it's current ipv4 address. Open this webpage in a browser, and login with username=rokudev, and the password is the passcode you entered
 6. Upload the zip file and click "install with zip"
 
 
