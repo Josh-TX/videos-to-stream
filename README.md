@@ -8,7 +8,7 @@ docker run -p 3000:3000 -v "/path/to/files:/media" joshtxdev/videos-to-stream
 
 This will serve an HLS stream at `/playlist.m3u8`. The stream will recursively scan the container's /media folder for all video files, randomly select a file, and play a random 1-minute video clip from the file. It then crossfades into the next randomly-selected file, and repeats this forever. To reduce hardware strain, the stream will auto-pause after 60 seconds of no network activity, and it auto-resumes once there is. 
 
-There's also source code for a basic Roku TV App. [See more info below](#playing-on-roku-tv)
+There's also source code for a basic Roku TV App. [See more info below](#playing-on-a-roku-tv)
 
 ## VTS Remote 
 
@@ -82,14 +82,14 @@ However, you can instead sideload a custom App using these steps:
 
 ## Fitting and Cropping
 
-If the input video doesn't match the output stream's dimensions, it'll the video to fit the output. But this isn't perfect when the aspect ratios differ. By default, black bars will be added on each side, which preserves the aspect ratio, but the result feels kinda zoomed out. There's no option for "stretch to fit", but there are the 
-`X_CROP_PERCENT` and `Y_CROP_PERCENT` settings that allow cropping the input video to better match the output aspect ratio. 
+If the input video doesn't match the output stream's dimensions, it'll scale the video to fit the output. But this isn't perfect when the aspect ratios differ. By default, black bars will be added on each side, which preserves the aspect ratio, but the end result feels kinda zoomed out. There's no option for "stretch to fit", but there is the 
+`X_CROP_PERCENT` or `Y_CROP_PERCENT` setting that allows cropping the input video to better match the output aspect ratio. 
 
-For example, if you have a video file with a 1/1 aspect ratio, and the stream outputs a landscape aspect ratio like 16/9, normally black bars will be added on the left & right side. But if you had a `Y_CROP_PERCENT` of 25, this would allow the top 12.5% and bottom 12.5% of the input video to be cropped out so that it's closer to the output aspect ratio. In this example there would still be black bars, but thinner ones. It will never crop more than needed, so you can think of the CROP_PERCENT settings as merely upper bounds for how much cropping is allowed. So setting it to 100 allows as much cropping as needed. 
+For example, if you have a video file with a 1/1 aspect ratio, and the stream outputs a landscape aspect ratio like 16/9, normally black bars will be added on the left & right side. But if you had a `Y_CROP_PERCENT` of 25, this would allow the top 12.5% and bottom 12.5% of the input video to be cropped out so that it's closer to the output aspect ratio. In this example there would still be black bars, but thinner ones. It will never crop more than needed, so you can think of the CROP_PERCENT setting as merely upper bound for how much cropping is allowed. So setting it to 100 allows as much cropping as needed. 
 
 ## Randomization and Bias
 
-The randomization logic is more akin to a playlist shuffle rather than true randomness. Under normal circumstances (no boosted/suppressed files), it plays every file once in a random order, and repeats this (different order each time). 
+The randomization logic is more akin to a playlist shuffle rather than just randomly selecting files. Under normal circumstances (no boosted/suppressed files), it plays every file once in a random order, and repeats this (different order each time). 
 
 There are many settings that can classify each file as being "boosted" or "suppressed". This can result in up to 3 groups of files: boosted, suppressed, and neutral. Each group basically has it's own playlist shuffling logic, and the stream will disproportionally choose files from the more boosted group. In fact, for each single playthrough of all suppressed files, it'll play all neutral files twice, and all boosted files 4 times. The `BOOSTED_FACTOR` or `SUPPRESSED_FACTOR` settings can make the relative ratios even more extreme.
 
