@@ -822,7 +822,7 @@ class FileBin(Gst.Bin):
     def __init__(self, filepath, seek_ms, width, height):
         super().__init__()
         FileBin._instance_count += 1
-        #print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
+        print(f"Created Filebin for {filepath}. Active Filebin Count: {FileBin._instance_count}")
         location = os.path.join(settings.input_root_dir, filepath)
         self.seek_ms = seek_ms
         self.pad_states = {"video": False, "audio": False}
@@ -979,9 +979,12 @@ class FileBin(Gst.Bin):
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
             self.emit("started")
-        elif self.segment_start_ns is None:
-            # We use segment_start_ns for more than just audio, so in the event that a video has no audio, we still need it set
-            self.segment_start_ns = new_segment.start
+        else 
+            # We use segment_start_ns and time_started for more than just audio, so in the event that a video has no audio, we still need to set each
+            if self.segment_start_ns is None:
+                self.segment_start_ns = new_segment.start
+            if self.time_started is None:
+                self.time_started = self._get_time()
         new_event = Gst.Event.new_segment(new_segment)
         pad.remove_probe(info.id)
         peer = pad.get_peer()
