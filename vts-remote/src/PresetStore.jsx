@@ -31,7 +31,7 @@ const usePresetStore = create((set, get) => {
             originalPresets = newPresets
             setTimeout(() => {
                 set({ saveBtn: "Save" });
-            }, 1000)
+            }, 3000)
             window.dispatchEvent(new CustomEvent('collapse-all-settings'));
         } catch (error) {
             set({ errorSave: error.message, isDirty: true, saveBtn: "Save" });

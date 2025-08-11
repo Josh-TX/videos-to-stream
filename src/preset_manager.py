@@ -19,15 +19,6 @@ class PresetManager:
             "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "8"),
             "INTRA_FILE_MAX_PERCENT": os.getenv("INTRA_FILE_MAX_PERCENT", "80"),
 
-            "FONT_SIZE": os.getenv("FONT_SIZE", "8"),
-            "WIDTH": os.getenv("WIDTH", "1280"),
-            "HEIGHT": os.getenv("HEIGHT", "720"),
-            "FRAME_RATE": os.getenv("FRAME_RATE", "30"),
-            "X_CROP_PERCENT": os.getenv("X_CROP_PERCENT", "0"),
-            "Y_CROP_PERCENT": os.getenv("Y_CROP_PERCENT", "0"),
-            "PREROLL_S": os.getenv("PREROLL_S", "0.5"),
-            "POSTROLL_S": os.getenv("POSTROLL_S", "0.5"),
-
             "BASE_DIRECTORY": os.getenv("BASE_DIRECTORY", ""),
 
             "EXCLUDE_STARTSWITH_CSV": os.getenv("EXCLUDE_STARTSWITH_CSV", ""),
@@ -47,8 +38,22 @@ class PresetManager:
 
             "BOOSTED_FACTOR": os.getenv("BOOSTED_FACTOR", "2"),
             "SUPPRESSED_FACTOR": os.getenv("SUPPRESSED_FACTOR", "2"),
-        }
 
+            "FONT_SIZE": os.getenv("FONT_SIZE", "8"),
+            "WIDTH": os.getenv("WIDTH", "1280"),
+            "HEIGHT": os.getenv("HEIGHT", "720"),
+            "FRAME_RATE": os.getenv("FRAME_RATE", "30"),
+            "X_CROP_PERCENT": os.getenv("X_CROP_PERCENT", "0"),
+            "Y_CROP_PERCENT": os.getenv("Y_CROP_PERCENT", "0"),
+
+            "AUTO_PAUSE_S": os.getenv("AUTO_PAUSE_S", "60"),
+            "PREROLL_S": os.getenv("PREROLL_S", "0.5"),
+            "POSTROLL_S": os.getenv("POSTROLL_S", "0.5"),
+            "FORCE_CLEANUP_S": os.getenv("FORCE_CLEANUP_S", "2"),
+            "HLS_SEG_DURATION_S": os.getenv("HLS_SEG_DURATION_S", "4"),
+            "HLS_SEG_COUNT": os.getenv("HLS_SEG_COUNT", "8"),
+            "HLS_SEG_EXTRACOUNT": os.getenv("HLS_SEG_EXTRACOUNT", "5")
+        }
     def _load_presets(self) -> List[Dict]:
         """Attempt to load presets from file. Fallback to default if file is missing or invalid."""
         if not os.path.exists(self.filepath):

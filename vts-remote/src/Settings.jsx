@@ -338,7 +338,7 @@ const Settings = () => {
                         />
                     </div>
                     <div className="panel" style={{ marginTop: "16px" }}>
-                        <h2 style={{ margin: "0 0 8px 0" }}>Technical Settings</h2>
+                        <h2 style={{ margin: "0 0 8px 0" }}>Video Settings</h2>
                         <SettingItem
                             name="FONT_SIZE"
                             preset={preset}
@@ -375,6 +375,15 @@ const Settings = () => {
                             settingChanged={settingChanged}
                             description="If the input video's aspect ratio is taller than the output stream's aspect ratio, a postive Y_CROP_PERCENT will crop the top and bottom edges of such videos. See Fitting and Cropping section of README for more info"
                         />
+                    </div>
+                    <div className="panel" style={{ marginTop: "16px" }}>
+                        <h2 style={{ margin: "0 0 8px 0" }}>Technical Settings</h2>
+                        <SettingItem
+                            name="AUTO_PAUSE_S"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="To amount time (in seconds) until the stream auto-pauses if there's no network activity. The stream will auto-resume as soon as a player connects to the stream. This allows running the server 24/7 while only straining your CPU when needed"
+                        />
                         <SettingItem
                             name="PREROLL_S"
                             preset={preset}
@@ -386,6 +395,30 @@ const Settings = () => {
                             preset={preset}
                             settingChanged={settingChanged}
                             description="The amount of time (in seconds) to play the video in the background at the end after changing the clip's volume and alpha"
+                        />
+                        <SettingItem
+                            name="FORCE_CLEANUP_S"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="If there's a internal issue with the stream's presentation timestamps (PTS), the clip might not be properly removed after POSTROLL_S. Because of this, there's also timestamp-agnostic method for removing clips just in case. By default this is 2 additional seconds after the normal cleanup should've run"
+                        />
+                        <SettingItem
+                            name="HLS_SEG_DURATION_S"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="The target duration (in seconds) of each segment file of the HLS stream."
+                        />
+                        <SettingItem
+                            name="HLS_SEG_COUNT"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="The number of segment files (.ts) that should be referenced by the playlist file (.m3u8). A lower count like 5 will reduce the stream delay, but if the player buffers often consider raising this"
+                        />
+                        <SettingItem
+                            name="HLS_SEG_EXTRACOUNT"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="The number of segment files in addition to HLS_SEG_COUNT that should be kept on disk. For example, if count was 8 and extracount was 5, the server would only keep 13 segment files at a time. As additional segments are made, the oldest ones are auto-removed."
                         />
                     </div>
                 </div>

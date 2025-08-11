@@ -28,6 +28,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
         super().end_headers()
 
+    def translate_path(self, path):
+        # For HLS files, serve from /hls directory
+        if path.endswith((".m3u8", ".ts")):
+            path = path.lstrip('/')
+            return os.path.join('/hls', path)
+        return super().translate_path(path)
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.end_headers()

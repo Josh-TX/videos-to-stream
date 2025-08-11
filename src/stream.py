@@ -45,15 +45,6 @@ def update_settings():
     settings.intra_file_min_gap_ms = math.floor(float(active_preset["INTRA_FILE_MIN_GAP_S"]) * 1000)
     settings.intra_file_max_percent = float(active_preset["INTRA_FILE_MAX_PERCENT"]) / 100
 
-    settings.width = int(active_preset["WIDTH"])
-    settings.height = int(active_preset["HEIGHT"])
-    settings.frame_rate_str = decimal_to_fraction_string(float(active_preset["FRAME_RATE"]))
-    settings.x_crop_percent = float(active_preset["X_CROP_PERCENT"]) / 100
-    settings.y_crop_percent = float(active_preset["Y_CROP_PERCENT"]) / 100
-    settings.font_size = int(active_preset["FONT_SIZE"])
-    settings.preroll_ms = math.floor(float(active_preset["PREROLL_S"]) * 1000)
-    settings.postroll_ms = math.floor(float(active_preset["POSTROLL_S"]) * 1000)
-
     settings.base_directory = active_preset["BASE_DIRECTORY"].strip(" \t\n\r/\\")
     settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip(" \t\n\r")
     settings.exclude_contains_csv = active_preset["EXCLUDE_CONTAINS_CSV"].strip(" \t\n\r")
@@ -69,14 +60,33 @@ def update_settings():
     settings.suppressed_notstartswith_csv = active_preset["SUPPRESSED_NOTSTARTSWITH_CSV"].strip(" \t\n\r")
     settings.suppressed_notcontains_csv = active_preset["SUPPRESSED_NOTCONTAINS_CSV"].strip(" \t\n\r")
     settings.suppressed_factor = int(active_preset["SUPPRESSED_FACTOR"])
+
+    settings.width = int(active_preset["WIDTH"])
+    settings.height = int(active_preset["HEIGHT"])
+    settings.frame_rate_str = decimal_to_fraction_string(float(active_preset["FRAME_RATE"]))
+    settings.x_crop_percent = float(active_preset["X_CROP_PERCENT"]) / 100
+    settings.y_crop_percent = float(active_preset["Y_CROP_PERCENT"]) / 100
+    settings.font_size = int(active_preset["FONT_SIZE"])
+
+    settings.auto_pause_ms = math.floor(float(active_preset["AUTO_PAUSE_S"]) * 1000)
+    settings.preroll_ms = math.floor(float(active_preset["PREROLL_S"]) * 1000)
+    settings.postroll_ms = math.floor(float(active_preset["POSTROLL_S"]) * 1000)
+    settings.force_cleanup_ms = math.floor(float(active_preset["FORCE_CLEANUP_S"]) * 1000)
+    settings.hls_seg_duration = int(active_preset["HLS_SEG_DURATION_S"])
+    settings.hls_seg_count = int(active_preset["HLS_SEG_COUNT"])
+    settings.hls_seg_extracount = int(active_preset["HLS_SEG_EXTRACOUNT"])
     
 update_settings()
 
+# I might letter make these setting configurable in vts-remote
+# But the quality settings do not function as expected. So I'll just have a constant value that works good
+settings.x264_speed = 4 # 1=ultrafast, 4=faster, 6=medium, 9=veryslow
+settings.x264_quantizer = 18 # high values (> 30) are noticable, but low values (< 20) seem to have no effect on quality or file size)
+
 settings.input_root_dir = "/media"
-settings.output_dir = "./serve"
+settings.output_dir = "/hls"
 settings.bin_creation_ms = 1000
 settings.audio_controller_fix = True
-settings.auto_pause_s = 60
 settings.last_activity_file = "last-activity.txt"
 settings.last_activity_on_startup_s = 30
 settings.recent_file_queue_length = 30
@@ -85,12 +95,18 @@ settings.error_message = ""
 
 def handle_presets_changed(signum, frame):
     print("presets changed")
-    old_width = settings.width
-    old_height = settings.height
-    old_font_size = settings.font_size
-    old_frame_rate_str = settings.frame_rate_str
+    technical_props = [
+        "width",
+        "height",
+        "font_size",
+        "frame_rate_str",
+        "hls_seg_duration",
+        "hls_seg_count",
+        "hls_seg_extracount"
+    ]
+    old_values = {prop: getattr(settings, prop) for prop in technical_props}
     update_settings()
-    if settings.width != old_width or settings.height != old_height or settings.font_size != old_font_size or settings.frame_rate_str != old_frame_rate_str:
+    if any(getattr(settings, prop) != old_values[prop] for prop in technical_props):        
         manager.technical_changes()
     settings.settings_change_msg = True
     def msg_done():
@@ -115,6 +131,9 @@ class HLSPipelineManager:
         print("technical changes to preset")
         self.videocapsfilter.set_property("caps", Gst.Caps.from_string(f"video/x-raw, format=NV12, width={settings.width}, height={settings.height}, framerate={settings.frame_rate_str}, pixel-aspect-ratio=1/1"))
         self.textoverlay.set_property("font-desc", f"Sans, {settings.font_size}")
+        self.hlssink.set_property("target-duration", settings.hls_seg_duration)
+        self.hlssink.set_property("playlist-length", settings.hls_seg_count)
+        self.hlssink.set_property("max-files", settings.hls_seg_count + settings.hls_seg_extracount)
 
     def _setup_pipeline(self):
         # video elements
@@ -135,12 +154,12 @@ class HLSPipelineManager:
         audioqueue = Gst.ElementFactory.make("queue", None)
         # shared ending elements
         mpegtsmux = Gst.ElementFactory.make("mpegtsmux", None)
-        hlssink = Gst.ElementFactory.make("hlssink", None)
+        self.hlssink = Gst.ElementFactory.make("hlssink", None)
 
         elements = [
             videotestsrc, videoconvert, self.videocapsfilter, self.compositor, self.textoverlay, x264enc, videoqueue,
             audiotestsrc, audioconvert, audioresample, audiocapsfilter, self.audiomixer, faac, audioqueue, 
-            mpegtsmux, hlssink
+            mpegtsmux, self.hlssink
         ]
         for i, e in enumerate(elements):
             if not e:
@@ -163,13 +182,15 @@ class HLSPipelineManager:
         self.textoverlay.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self.text_overlay_probe_callback)
 
 
-        hlssink.set_property("location", os.path.join(settings.output_dir, "segment%05d.ts"))
-        hlssink.set_property("playlist-location", os.path.join(settings.output_dir, "playlist.m3u8"))
-        hlssink.set_property("target-duration", 4)
-        hlssink.set_property("playlist-length", 12)
-        hlssink.set_property("max-files", 18)
+        self.hlssink.set_property("location", os.path.join(settings.output_dir, "segment%05d.ts"))
+        self.hlssink.set_property("playlist-location", os.path.join(settings.output_dir, "playlist.m3u8"))
+        self.hlssink.set_property("target-duration", settings.hls_seg_duration)
+        self.hlssink.set_property("playlist-length", settings.hls_seg_count)
+        self.hlssink.set_property("max-files", settings.hls_seg_count + settings.hls_seg_extracount)
 
-        x264enc.set_property("speed-preset", "fast")
+        x264enc.set_property("speed-preset", settings.x264_speed)
+        x264enc.set_property("quantizer", settings.x264_quantizer)
+        x264enc.set_property("pass", "qual")
         audiotestsrc.set_property("is-live", True)
         audiotestsrc.set_property("wave", "silence")
         audiocapsfilter.set_property("caps", Gst.Caps.from_string("audio/x-raw, format=F32LE,rate=44100,channels=2"))
@@ -195,7 +216,7 @@ class HLSPipelineManager:
         faac.link(audioqueue)
         audioqueue.link(mpegtsmux)
 
-        mpegtsmux.link(hlssink)
+        mpegtsmux.link(self.hlssink)
 
         self.zorder = 1
         self.is_paused = False
@@ -204,10 +225,10 @@ class HLSPipelineManager:
 
     def timeout_callback(self):
         try:
-            s = self.get_seconds_since_activity()
-            if s > settings.auto_pause_s:
+            ms = self.get_ms_since_activity()
+            if ms > settings.auto_pause_ms:
                 if not self.is_paused:
-                    print(f"pausing stream due to {s} seconds of inactivity")
+                    print(f"pausing stream due to {settings.auto_pause_ms / 1000} seconds of inactivity")
                     self.pipeline.set_state(Gst.State.PAUSED)
                     self.is_paused = True
                 GLib.timeout_add(1000, self.timeout_callback)
@@ -366,7 +387,7 @@ class HLSPipelineManager:
                         old_compositor_pad.remove_probe(video_probe_id)
                     self.cleanup_clip(old_clip)
             # allow postroll + 2 seconds until we force cleanup
-            GLib.timeout_add((ns_till_swap + transition_ns) / Gst.MSECOND + settings.postroll_ms + 2000, force_cleanup)
+            GLib.timeout_add((ns_till_swap + transition_ns) / Gst.MSECOND + settings.postroll_ms + settings.force_cleanup_ms, force_cleanup)
         return False # Don't repeat timeout
 
     def cleanup_clip(self, clip):
@@ -394,13 +415,13 @@ class HLSPipelineManager:
 
 
     
-    def get_seconds_since_activity(self):
+    def get_ms_since_activity(self):
         try:
             with open(settings.last_activity_file, "r") as f:
                 timestamp_str = f.read().strip()
             last_activity = datetime.fromisoformat(timestamp_str)
             now = datetime.now(UTC)
-            return math.floor((now - last_activity).total_seconds())
+            return math.floor((now - last_activity).total_seconds() * 1000)
         except Exception as e:
             print(f"Error reading last activity: {e}")
             
@@ -958,7 +979,9 @@ class FileBin(Gst.Bin):
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
             self.emit("started")
-
+        elif self.segment_start_ns is None:
+            # We use segment_start_ns for more than just audio, so in the event that a video has no audio, we still need it set
+            self.segment_start_ns = new_segment.start
         new_event = Gst.Event.new_segment(new_segment)
         pad.remove_probe(info.id)
         peer = pad.get_peer()
