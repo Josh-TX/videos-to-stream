@@ -979,7 +979,7 @@ class FileBin(Gst.Bin):
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
             self.emit("started")
-        else 
+        else:
             # We use segment_start_ns and time_started for more than just audio, so in the event that a video has no audio, we still need to set each
             if self.segment_start_ns is None:
                 self.segment_start_ns = new_segment.start
