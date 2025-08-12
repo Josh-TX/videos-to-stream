@@ -981,7 +981,7 @@ class FileBin(Gst.Bin):
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
             call_start = True
-        elif not self.audio_block_probe_id and not start_emitted:
+        elif not self.audio_block_probe_id and not self.start_emitted:
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
             call_start = True
