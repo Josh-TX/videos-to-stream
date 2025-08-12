@@ -341,7 +341,7 @@ class HLSPipelineManager:
             old_filebin_elapsed = now - old_clip.filebin.time_started
             last_pts = old_clip.filebin.segment_start_ns + old_filebin_elapsed + ns_till_swap + transition_ns
             def try_cleanup():
-                if old_clip.video_finished and old_clip.audio_finished:
+                if old_clip.video_finished and old_clip.audio_finished and not old_clip.cleanup_scheduled:
                     old_clip.cleanup_scheduled = True
                     GLib.timeout_add(settings.postroll_ms, lambda: self.cleanup_clip(old_clip))
     
@@ -832,6 +832,7 @@ class FileBin(Gst.Bin):
         self.segment_start_ns = None
         self.segment_base_ns = None
         self.time_started = None
+        self.start_emitted = False
 
         # Create elements
         filesrc = Gst.ElementFactory.make("filesrc", None)
@@ -974,17 +975,20 @@ class FileBin(Gst.Bin):
         
         caps = pad.get_current_caps() or pad.query_caps(None)
         isAudio = caps.get_structure(0).get_name().startswith("audio/")
+        call_start = False
         # I might later change this logic to use the min or max start
         if isAudio:
             self.segment_start_ns = new_segment.start
             self.time_started = self._get_time()
+            call_start = True
+        elif not self.audio_block_probe_id and not start_emitted:
+            self.segment_start_ns = new_segment.start
+            self.time_started = self._get_time()
+            call_start = True
+
+        if call_start and not self.start_emitted:
+            self.start_emitted = True
             self.emit("started")
-        else:
-            # We use segment_start_ns and time_started for more than just audio, so in the event that a video has no audio, we still need to set each
-            if self.segment_start_ns is None:
-                self.segment_start_ns = new_segment.start
-            if self.time_started is None:
-                self.time_started = self._get_time()
         new_event = Gst.Event.new_segment(new_segment)
         pad.remove_probe(info.id)
         peer = pad.get_peer()
