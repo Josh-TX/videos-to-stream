@@ -22,7 +22,7 @@ const StreamPlayer = () => {
 
   return (
     <>    
-      <div style={{position: "fixed", zIndex: 200, opacity: 0.6}}><Logo></Logo></div>
+      <div style={{position: "fixed", zIndex: 200, opacity: 0.55}}><Logo></Logo></div>
       <video ref={videoRef} controls/>
     </>
   );

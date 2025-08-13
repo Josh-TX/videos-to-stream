@@ -183,7 +183,7 @@ const Settings = () => {
             <div className="flex-container center-container">
                 <Logo></Logo>
                 
-                <div className="flex-grow" style={{ padding: "0 0 50px 0" }}>
+                <div className="flex-grow" style={{ padding: "0 2px 50px 2px" }}>
                     <div className="panel" style={{ marginTop: "4px" }}>
                         <h2 style={{ margin: "0 0 8px 0" }}>General Settings</h2>
                         <SettingItem

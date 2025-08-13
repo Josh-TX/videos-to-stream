@@ -79,12 +79,12 @@ const FileBrowser = () => {
         <>
             <div className="center-container" style={{marginTop: 0}}>
                 <Logo></Logo>
-                <div className="panel" style={{marginTop: "8px"}}>
+                <div className="panel" style={{margin: "4px 2px 16px 2px"}}>
                     <p style={{marginBottom: "4px"}}><span className="text-muted">Current Preset:</span> {preset.name}</p>
                     <RelevantSettings settings={presetAlgo}></RelevantSettings>
                 </div>
 
-                <div className="panel" style={{marginTop: "16px"}}>
+                <div className="panel" style={{margin: "0 2px 16px 2px"}}>
                     <h2 style={{marginTop: 0}}>Summary</h2>
                     <table style={{width: "100%", textAlign: "left",  marginBottom: "16px"}}>
                         <thead>
@@ -128,7 +128,7 @@ const FileBrowser = () => {
                         </tbody>
                     </table>
                 </div>
-                <div className="panel" style={{marginTop: "16px", marginBottom: "12px"}}>
+                <div className="panel" style={{margin: "0 2px 16px 2px"}}>
                     <h2 style={{ marginTop: "0", marginBottom: "8px" }}>File List</h2>
                     <div style={{display: "flex", justifyContent: "space-between", marginBottom: "12px"}} className="text-muted">
                         <span>showing {files.length} of {fileCount}</span>
