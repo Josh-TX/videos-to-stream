@@ -190,7 +190,19 @@ const Settings = () => {
                             name="CLIP_DURATION_S"
                             preset={preset}
                             settingChanged={settingChanged}
-                            description="The duration (in seconds) of each clip, not including crossfade time. If a file's total duration is less than CLIP_DURATION_S, then the clip's duration will just be the file's duration"
+                            description="The max duration (in seconds) of each clip, not including crossfade time. If a file's total duration is less than CLIP_DURATION_S, then the clip's duration will just be the file's duration"
+                        />
+                        <SettingItem
+                            name="CLIP_DURATION_MAX_PERCENT"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="Another way to limit the max duration of each clip. An individual clip's duration cannot exceed the [file duration * CLIP_DURATION_MAX_PERCENT]. For example, a value of 50% would mean that a file with a duration of 40s couldn't have a clip longer than 20s. You can use CLIP_DURATION_MIN_S to mitigate the effect of this setting."
+                        />
+                        <SettingItem
+                            name="CLIP_DURATION_MIN_S"
+                            preset={preset}
+                            settingChanged={settingChanged}
+                            description="The min duration (in seconds) of each clip, not including crossfade time. This only has an effect in conjunction with CLIP_DURATION_MAX_PERCENT. This is basically a lower bound to how much the clip's max duration can be reduced by the CLIP_DURATION_MAX_PERCENT. This cannot cause a duration longer than CLIP_DURATION_S, nor can it make a clip's duration exceed the file's duration"
                         />
                         <SettingItem
                             name="INTER_TRANSITION_S"
@@ -217,10 +229,10 @@ const Settings = () => {
                             description=" When there's multiple clips per file, determines the minimum seconds between the end of one clip and the start of the next clip. A high value can reduce the number of clips per file. Be careful with a low value, since seeking is keyframe-based, so the next clip could contain footage you just saw. "
                         />
                         <SettingItem
-                            name="INTRA_FILE_MAX_PERCENT"
+                            name="CLIPS_PER_FILE_MAX_PERCENT"
                             preset={preset}
                             settingChanged={settingChanged}
-                            description="Another way to limit the max clips per file. If a file is 10 minutes long, a value of 80 means that you it can't play more than 8 minutes worth of clips"
+                            description="Another way to limit the max clips per file. For example, If a file is 10 minutes long, a value of 15% means that you it won't play more than 90s worth of clips from that file. If CLIP_DURATION_S was 60s, then this would limit it to only 1 clip from this 10min file. This setting will always allow at least 1 clip though"
                         />
                     </div>
                     <div className="panel" style={{ marginTop: "16px" }}>

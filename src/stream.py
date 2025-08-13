@@ -39,11 +39,13 @@ def update_settings():
     preset_manager = PresetManager()
     active_preset = preset_manager.get_active_preset()
     settings.clip_duration_ms = math.floor(float(active_preset["CLIP_DURATION_S"]) * 1000)
+    settings.clip_duration_max_percent = min(float(active_preset["CLIP_DURATION_MAX_PERCENT"]) / 100, 1)
+    settings.clip_duration_min_ms = math.floor(float(active_preset["CLIP_DURATION_MIN_S"]) * 1000)
     settings.inter_transition_ms = math.floor(float(active_preset["INTER_TRANSITION_S"]) * 1000)
     settings.intra_transition_ms = math.floor(float(active_preset["INTRA_TRANSITION_S"]) * 1000)
     settings.clips_per_file = math.floor(float(active_preset["CLIPS_PER_FILE"]))
+    settings.clips_per_file_max_percent = float(active_preset["CLIPS_PER_FILE_MAX_PERCENT"]) / 100
     settings.intra_file_min_gap_ms = math.floor(float(active_preset["INTRA_FILE_MIN_GAP_S"]) * 1000)
-    settings.intra_file_max_percent = float(active_preset["INTRA_FILE_MAX_PERCENT"]) / 100
 
     settings.base_directory = active_preset["BASE_DIRECTORY"].strip(" \t\n\r/\\")
     settings.exclude_startswith_csv = active_preset["EXCLUDE_STARTSWITH_CSV"].strip(" \t\n\r")
@@ -540,7 +542,8 @@ class ClipInfoManager:
         duration_w_inter_transitions = settings.clip_duration_ms + (settings.inter_transition_ms * 2)
 
         def simple_case():
-            clip_duration_ms = min(duration_w_inter_transitions, file_duration_ms)
+            max_duration_due_to_percent = max(settings.clip_duration_min_ms + (settings.inter_transition_ms * 2), math.floor(file_duration_ms * settings.clip_duration_max_percent))
+            clip_duration_ms = min(duration_w_inter_transitions, max_duration_due_to_percent, file_duration_ms)
             startrange_ms = file_duration_ms - clip_duration_ms
             seek_ms = random.randint(0, startrange_ms)
             return [ClipInfo(filepath, seek_ms, clip_duration_ms, settings.inter_transition_ms, settings.inter_transition_ms, width, height)]
@@ -553,7 +556,7 @@ class ClipInfoManager:
         ms_after_first_clip = file_duration_ms - duration_w_inter_transitions # must result in a positive number because of the earlier check
         duration_w_intra_transitions = settings.clip_duration_ms + (settings.intra_transition_ms * 2)
         max_clips_due_to_gaps = 1 + (ms_after_first_clip // (duration_w_intra_transitions + settings.intra_file_min_gap_ms))
-        max_clips_due_to_percent = file_duration_ms // settings.intra_file_max_percent
+        max_clips_due_to_percent = (file_duration_ms * settings.clips_per_file_max_percent) // duration_w_intra_transitions
         clip_count = min(max_clips_due_to_gaps, max_clips_due_to_percent, settings.clips_per_file)
         if clip_count <= 1:
             return simple_case()

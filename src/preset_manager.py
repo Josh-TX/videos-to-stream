@@ -13,11 +13,13 @@ class PresetManager:
             "name": "default",
             "isActive": True,
             "CLIP_DURATION_S": os.getenv("CLIP_DURATION_S", "60"),
+            "CLIP_DURATION_MAX_PERCENT": os.getenv("CLIP_DURATION_MAX_PERCENT", "100"),
+            "CLIP_DURATION_MIN_S": os.getenv("CLIP_DURATION_MIN_S", "5"),
             "INTER_TRANSITION_S": os.getenv("INTER_TRANSITION_S", "2"),
             "INTRA_TRANSITION_S": os.getenv("INTRA_TRANSITION_S", "0"),
             "CLIPS_PER_FILE": os.getenv("CLIPS_PER_FILE", "1"),
             "INTRA_FILE_MIN_GAP_S": os.getenv("INTRA_FILE_MIN_GAP_S", "8"),
-            "INTRA_FILE_MAX_PERCENT": os.getenv("INTRA_FILE_MAX_PERCENT", "80"),
+            "CLIPS_PER_FILE_MAX_PERCENT": os.getenv("CLIPS_PER_FILE_MAX_PERCENT", "80"),
 
             "BASE_DIRECTORY": os.getenv("BASE_DIRECTORY", ""),
 
